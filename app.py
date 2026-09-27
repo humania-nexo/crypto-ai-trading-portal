@@ -64,7 +64,11 @@ with st.sidebar:
     st.caption("Asistente Autónomo de Análisis & Trading")
     
     st.subheader("⚙️ Configuración del Escáner")
-    scan_timeframe = st.selectbox("Temporalidad de Análisis", ["5m (Corto Plazo)", "15m (Recomendado)", "1h (Tendencial)", "4h (Swing)"], index=1)
+    scan_timeframe = st.selectbox(
+        "Temporalidad de Análisis",
+        ["5m (Scalping Rápido < 30 min)", "15m (Intradía 30-90 min)", "1h (Tendencial)", "4h (Swing)"],
+        index=0
+    )
     tf_clean = scan_timeframe.split()[0]
     
     watchlist_options = [
@@ -102,11 +106,12 @@ c5.metric("🏆 Win Rate Histórico", f"{portfolio['win_rate']:.1f}%")
 st.markdown("---")
 
 # Pestañas principales
-tab_radar, tab_chart, tab_portfolio, tab_news = st.tabs([
-    "🎯 Radar de Oportunidades (Opciones de Entrada)",
+tab_radar, tab_chart, tab_portfolio, tab_news, tab_binance_guide = st.tabs([
+    "🎯 Radar de Oportunidades (< 30 min)",
     "📊 Inspección de Gráfico & Indicadores",
     "💼 Mis Posiciones Activas (OCO)",
-    "📰 Noticias & Sentimiento Global"
+    "📰 Noticias & Sentimiento Global",
+    "🛠️ Configuración Exacta en Binance"
 ])
 
 # =========================================================================
@@ -328,3 +333,60 @@ with tab_news:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+# =========================================================================
+# TAB 5: GUÍA DE CONFIGURACIÓN PASO A PASO EN BINANCE
+# =========================================================================
+with tab_binance_guide:
+    st.subheader("🛠️ Cómo Configurar tu Gráfico de Binance para ver lo mismo que la IA")
+    st.markdown("""
+    Para que puedas corroborar visualmente cada señal que te propone el agente en tu pantalla de Binance, sigue estos pasos para configurar la vista **TradingView** de Binance con los mismos parámetros exactos:
+    """)
+    
+    st.markdown("""
+    ### ⏱️ 1. Temporalidad (Para operaciones < 30 minutos)
+    - En el gráfico de Binance, selecciona arriba la temporalidad **`5m`** (5 minutos).
+    - *Razón*: Cada vela representa 5 minutos. Un trade típico de 3 a 6 velas dura entre **15 y 30 minutos**.
+    
+    ---
+    
+    ### 📈 2. Medias Móviles Exponenciales (EMA)
+    Haz clic en el botón de **Indicadores Técnicos (icono de `fx` o compás)** en Binance y busca **`EMA` (Moving Average Exponential)**. Agrégala 3 veces con esta configuración:
+    
+    | Indicador | Longitud (Periodo) | Color Recomendado | ¿Qué representa para la IA? |
+    | :--- | :--- | :--- | :--- |
+    | **EMA 1** | **`20`** | 🟡 **Amarillo** | Tendencia rápida de corto plazo (gatillo de entrada). |
+    | **EMA 2** | **`50`** | 🟢 **Verde** | Soporte dinámico intermedio (zona de rebote). |
+    | **EMA 3** | **`200`** | 🟣 **Morado** | Tendencia principal. Si el precio está arriba, solo se compran largos. |
+    
+    ---
+    
+    ### 📊 3. RSI (Relative Strength Index)
+    En el menú de indicadores, busca **`RSI`**:
+    - **Longitud (Length)**: **`14`**
+    - **Nivel de Sobrecompra (Upper Band)**: **`70`** (Color Rojo)
+    - **Nivel Medio (Middle Band)**: **`50`**
+    - **Nivel de Sobreventa (Lower Band)**: **`30`** (Color Verde)
+    - *¿Qué ve la IA?*: Si el RSI toca 30-35 en velas de 5m y rebota, es una zona de compra con descuento. Si está entre 45 y 60, confirma impulso alcista sano.
+    
+    ---
+    
+    ### ⚡ 4. MACD (Moving Average Convergence Divergence)
+    En el menú de indicadores, busca **`MACD`**:
+    - **Fast Length (Longitud Rápida)**: **`12`**
+    - **Slow Length (Longitud Lenta)**: **`26`**
+    - **Signal Smoothing (Señal)**: **`9`**
+    - *¿Qué ve la IA?*: El "Cruce Dorado" ocurre cuando la línea azul rápida cruza hacia arriba a la línea naranja/roja lenta y el histograma pasa a verde.
+    
+    ---
+    
+    ### 🎯 5. Cómo colocar la orden en Binance (OCO)
+    Cuando decidas entrar en una oportunidad aprobada:
+    1. Compras la cantidad deseada a precio de **Mercado (Market)** en Binance Spot.
+    2. Inmediatamente después, vas a la pestaña **Vender (Sell)** y seleccionas el tipo de orden **`OCO`**:
+       - En **Precio (Limit)**: Escribes el **Take Profit** sugerido por la IA.
+       - En **Stop**: Escribes el **Stop Loss Trigger** sugerido por la IA.
+       - En **Límite**: Escribes un valor ligeramente inferior al Stop (o el mismo Stop Loss).
+    3. Haces clic en **Vender**. ¡Listo! Si el precio sube al TP ganas, si baja al SL se corta la pérdida y la otra orden se cancela sola.
+    """)
+
