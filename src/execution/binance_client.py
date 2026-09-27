@@ -11,14 +11,14 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class BinanceLiveClient:
-    def __init__(self, api_key: str, api_secret: str, testnet: bool = False):
-        self.api_key = api_key
-        self.api_secret = api_secret
+    def __init__(self, api_key: Optional[str] = None, api_secret: Optional[str] = None, testnet: bool = False):
+        self.api_key = api_key or ""
+        self.api_secret = api_secret or ""
         self.testnet = testnet
         self.is_connected = False
         self.client = None
         
-        if api_key and api_secret and len(api_key) > 10:
+        if self.api_key and self.api_secret and len(self.api_key) > 10:
             try:
                 self.client = ccxt.binance({
                     'apiKey': api_key,
