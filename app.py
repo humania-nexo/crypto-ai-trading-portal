@@ -12,6 +12,10 @@ import os
 from datetime import datetime
 from dotenv import load_dotenv
 
+import importlib
+import src.analysis.market_scanner
+importlib.reload(src.analysis.market_scanner)
+
 from src.news.sentiment_agent import SentimentAgent
 from src.analysis.technical_agent import TechnicalAgent
 from src.analysis.indicators import TechnicalIndicators
