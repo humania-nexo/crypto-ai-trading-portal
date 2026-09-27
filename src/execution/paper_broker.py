@@ -163,6 +163,57 @@ class PaperBroker:
             
         return closed_trades
 
+    def manual_close_position(
+        self,
+        symbol: str,
+        exit_price: float,
+        exit_reason: str = "MANUAL"
+    ) -> Dict[str, Any]:
+        """Cierra manualmente una posición al precio indicado y calcula el PnL exacto."""
+        if symbol not in self.open_positions:
+            return {"status": "error", "message": f"No se encontró posición para {symbol}"}
+            
+        pos = self.open_positions[symbol]
+        quantity = pos["quantity"]
+        entry_price = pos["entry_price"]
+        
+        gross_proceeds = exit_price * quantity
+        fee = gross_proceeds * self.fee_rate
+        net_proceeds = gross_proceeds - fee
+        
+        pnl_usdt = net_proceeds - pos["cost_usdt"] - pos["fees_paid"]
+        pnl_percent = (pnl_usdt / pos["cost_usdt"]) * 100
+        
+        self.balance_usdt += net_proceeds
+        
+        trade_record = {
+            "symbol": symbol,
+            "entry_price": entry_price,
+            "exit_price": exit_price,
+            "quantity": quantity,
+            "entry_time": pos["entry_time"],
+            "exit_time": datetime.utcnow().isoformat(),
+            "exit_reason": exit_reason,
+            "pnl_usdt": round(pnl_usdt, 4),
+            "pnl_percent": round(pnl_percent, 2),
+            "fees_total": round(pos["fees_paid"] + fee, 4),
+            "signal_reason": pos.get("reason", "Manual")
+        }
+        
+        self.trade_history.append(trade_record)
+        del self.open_positions[symbol]
+        self.save_state()
+        
+        return {
+            "status": "success",
+            "trade": trade_record
+        }
+
+    def set_custom_balance(self, new_balance: float):
+        """Permite al usuario fijar su saldo real exacto."""
+        self.balance_usdt = round(float(new_balance), 2)
+        self.save_state()
+
     def get_portfolio_summary(self, current_prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         """Calcula el valor total del portafolio, PnL no realizado y métricas de rendimiento."""
         unrealized_pnl = 0.0
@@ -182,8 +233,10 @@ class PaperBroker:
                 "entry_price": pos["entry_price"],
                 "current_price": current_price,
                 "quantity": pos["quantity"],
+                "cost_usdt": pos.get("cost_usdt", pos["entry_price"] * pos["quantity"]),
                 "stop_loss": pos["stop_loss"],
                 "take_profit": pos["take_profit"],
+                "entry_time": pos.get("entry_time", ""),
                 "unrealized_pnl_usdt": round(pos_unrealized, 2),
                 "unrealized_pnl_pct": round(pos_pct, 2)
             })
@@ -198,14 +251,21 @@ class PaperBroker:
         win_rate = (len(winning_trades) / total_trades * 100) if total_trades > 0 else 0.0
         total_realized_pnl = sum([t["pnl_usdt"] for t in self.trade_history])
         
+        gross_profit = sum([t["pnl_usdt"] for t in winning_trades])
+        gross_loss = abs(sum([t["pnl_usdt"] for t in losing_trades]))
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 1.0)
+        
         return {
             "cash_balance_usdt": round(self.balance_usdt, 2),
             "total_equity_usdt": round(total_equity, 2),
             "unrealized_pnl_usdt": round(unrealized_pnl, 2),
             "total_realized_pnl_usdt": round(total_realized_pnl, 2),
             "total_trades": total_trades,
+            "winning_trades": len(winning_trades),
+            "losing_trades": len(losing_trades),
             "win_rate": round(win_rate, 2),
+            "profit_factor": round(profit_factor, 2),
             "open_positions_count": len(self.open_positions),
             "open_positions": positions_summary,
-            "trade_history_sample": self.trade_history[-5:]
+            "trade_history": self.trade_history
         }

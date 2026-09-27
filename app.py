@@ -1,5 +1,5 @@
 """
-Crypto Multi-Agent Web Portal & AI Opportunity Radar.
+Crypto Multi-Agent Web Portal & AI Opportunity Radar with Trading Journal.
 Built with Streamlit & Plotly.
 Run with: streamlit run app.py
 """
@@ -62,10 +62,18 @@ tech_agent, sentiment_agent, risk_manager, broker, scanner = get_agents()
 
 # --- BARRA LATERAL ---
 with st.sidebar:
-    st.image("https://cryptologos.cc/logos/binance-coin-bnb-logo.png", width=45)
-    st.title("Crypto AI Radar")
-    st.caption("Asistente Autónomo de Análisis & Trading")
+    st.markdown("## 🪙 **Crypto AI Radar**")
+    st.caption("Asistente Autónomo de Análisis & Diario de Trading")
     
+    st.subheader("💵 Configurar Saldo de Cuenta")
+    user_bal = st.number_input("Saldo en USDT", min_value=1.0, max_value=1000000.0, value=float(broker.balance_usdt), step=5.0)
+    if user_bal != broker.balance_usdt:
+        if st.button("💾 Actualizar Saldo", use_container_width=True):
+            broker.set_custom_balance(user_bal)
+            risk_manager.set_daily_baseline(user_bal)
+            st.success(f"Saldo actualizado a ${user_bal:,.2f} USDT")
+            st.rerun()
+
     st.subheader("⚙️ Configuración del Escáner")
     scan_timeframe = st.selectbox(
         "Temporalidad de Análisis",
@@ -105,26 +113,25 @@ with st.sidebar:
     risk_manager.max_risk_per_trade_pct = risk_pct
     
     st.markdown("---")
-    if st.button("🗑️ Reset Saldo Simulado ($100)", use_container_width=True):
-        broker.balance_usdt = 100.0
+    if st.button("🗑️ Reset Historial y Posiciones", use_container_width=True):
         broker.open_positions = {}
         broker.trade_history = []
         broker.save_state()
-        st.success("Saldo reiniciado a $100.00 USDT")
+        st.success("Historial reiniciado correctamente.")
         st.rerun()
 
 # --- HEADER Y MÉTRICAS DE CAPITAL ---
 portfolio = broker.get_portfolio_summary()
 
-st.title("🎯 Radar de Oportunidades & Asesor Cripto IA")
-st.markdown("La IA escanea decenas de criptomonedas en paralelo, analiza velas, indicadores y noticias, y te presenta las **mejores opciones de entrada explicadas** para que tú decidas.")
+st.title("🎯 Radar de Oportunidades & Diario de Trading Real")
+st.markdown("Escanea decenas de criptomonedas en paralelo, analiza velas, indicadores y noticias, y lleva un **seguimiento exacto de cada entrada y estadística de rendimiento**.")
 
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("💰 Balance Libre", f"${portfolio['cash_balance_usdt']:,.2f} USDT")
 c2.metric("🏦 Patrimonio Total", f"${portfolio['total_equity_usdt']:,.2f} USDT")
 c3.metric("📈 PnL No Realizado", f"${portfolio['unrealized_pnl_usdt']:+,.2f} USDT")
-c4.metric("🟢 Posiciones Abiertas", f"{portfolio['open_positions_count']}")
-c5.metric("🏆 Win Rate Histórico", f"{portfolio['win_rate']:.1f}%")
+c4.metric("🟢 Posiciones Activas", f"{portfolio['open_positions_count']}")
+c5.metric("🏆 Win Rate Histórico", f"{portfolio['win_rate']:.1f}% ({portfolio['total_trades']} cerradas)")
 
 st.markdown("---")
 
@@ -132,7 +139,7 @@ st.markdown("---")
 tab_radar, tab_chart, tab_portfolio, tab_news, tab_binance_guide = st.tabs([
     "🎯 Radar de Oportunidades (< 30 min)",
     "📊 Inspección de Gráfico & Indicadores",
-    "💼 Mis Posiciones Activas (OCO)",
+    "💼 Mi Portafolio & Diario de Trading",
     "📰 Noticias & Sentimiento Global",
     "🛠️ Configuración Exacta en Binance"
 ])
@@ -161,7 +168,7 @@ with tab_radar:
     st.subheader(f"📋 Opciones de Entrada Detectadas ({len(top_opps)} encontradas)")
     
     if not top_opps:
-        st.warning("⏳ En este momento ningún par cumple con los filtros estrictos de alta probabilidad y confluencia alcista. La IA recomienda mantenerse al margen (HOLD) para proteger el capital.")
+        st.warning("⏳ En este momento ningún par cumple con los filtros de confluencia alcista en temporalidad 5m. La IA recomienda mantenerse en liquidez (USDT).")
     else:
         for idx, opp in enumerate(top_opps):
             is_high = "ALTA" in opp["conviction"]
@@ -187,11 +194,11 @@ with tab_radar:
                 # Desglose de Razones
                 col_r1, col_r2 = st.columns(2)
                 with col_r1:
-                    st.markdown("**📊 Razones Técnicas del Gráfico:**")
+                    st.markdown("**📊 Razones Técnicas & Figuras:**")
                     for reason in opp["technical_reasons"]:
                         st.markdown(f"- {reason}")
                 with col_r2:
-                    st.markdown("**📰 Razones Fundamentales y de Sentimiento:**")
+                    st.markdown("**📰 Razones Macro & Noticias:**")
                     for f_reason in opp["fundamental_reasons"]:
                         st.markdown(f"- {f_reason}")
                         
@@ -207,8 +214,7 @@ with tab_radar:
                 col_act1, col_act2 = st.columns([1, 3])
                 with col_act1:
                     btn_key = f"buy_btn_{opp['symbol']}_{idx}"
-                    if st.button(f"🟢 APROBAR Y ENTRAR EN {opp['symbol']}", key=btn_key, type="primary", use_container_width=True):
-                        # Calcular parámetros de orden reales
+                    if st.button(f"🟢 REGISTRAR / ENTRAR EN {opp['symbol']}", key=btn_key, type="primary", use_container_width=True):
                         trade_params = risk_manager.calculate_trade_parameters(
                             symbol=opp["symbol"],
                             entry_price=opp["price"],
@@ -222,10 +228,10 @@ with tab_radar:
                             quantity=trade_params["quantity"],
                             stop_loss=opp["stop_loss"],
                             take_profit=opp["take_profit"],
-                            reason=f"Aprobado por el usuario: {opp['setup_type']}"
+                            reason=f"{opp['setup_type']}"
                         )
                         if res["status"] == "executed":
-                            st.success(f"¡Orden ejecutada con éxito para {opp['symbol']}! Monitoreando SL y TP en la pestaña 'Mis Posiciones'.")
+                            st.success(f"¡Posición registrada con éxito para {opp['symbol']}! Monitoreando en la pestaña 'Mi Portafolio'.")
                             st.rerun()
                         else:
                             st.error(res["message"])
@@ -276,46 +282,122 @@ with tab_chart:
         st.plotly_chart(fig, use_container_width=True)
 
 # =========================================================================
-# TAB 3: POSICIONES ABIERTAS & HISTORIAL
+# TAB 3: MI PORTAFOLIO & DIARIO DE TRADING REAL
 # =========================================================================
 with tab_portfolio:
-    st.subheader("🟢 Monitoreo de Posiciones Abiertas (OCO)")
+    sub_t1, sub_t2, sub_t3 = st.tabs([
+        "🟢 Posiciones Activas en Monitoreo",
+        "➕ Registrar Entrada Manual",
+        "📊 Estadísticas & Historial Completo"
+    ])
     
-    # Actualizar precios
-    current_prices = {}
-    for sym in portfolio["open_positions"]:
-        t_data = tech_agent.fetch_ohlcv(symbol=sym["symbol"], timeframe="5m", limit=2)
-        if not t_data.empty:
-            current_prices[sym["symbol"]] = float(t_data.iloc[-1]["close"])
-            
-    broker.update_and_check_positions(current_prices)
-    portfolio_updated = broker.get_portfolio_summary(current_prices)
-    
-    if portfolio_updated["open_positions"]:
-        for pos in portfolio_updated["open_positions"]:
-            pnl_col = "#0ecb81" if pos["unrealized_pnl_usdt"] >= 0 else "#f6465d"
-            st.markdown(f"""
-            <div class="card-opp" style="border-left: 6px solid {pnl_col};">
-                <div style="display:flex; justify-content: space-between; font-weight: bold; font-size: 18px;">
-                    <span>{pos['symbol']}</span>
-                    <span style="color: {pnl_col};">${pos['unrealized_pnl_usdt']:+,.2f} ({pos['unrealized_pnl_pct']:+.2f}%)</span>
-                </div>
-                <div style="font-size: 14px; margin-top: 10px; color: #94a3b8;">
-                    Precio de Entrada: <b>${pos['entry_price']:,.4f}</b>  |  Precio Actual Binance: <b>${pos['current_price']:,.4f}</b><br>
-                    🛑 <b>Stop Loss (SL):</b> <span style="color:#f87171;">${pos['stop_loss']:,.4f}</span>  |  
-                    🎯 <b>Take Profit (TP):</b> <span style="color:#4ade80;">${pos['take_profit']:,.4f}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("No tienes posiciones abiertas en este momento. Ve a la pestaña 'Radar de Oportunidades' para evaluar nuevas entradas.")
+    # -------------------------------------------------------------
+    # SUB-TAB 1: POSICIONES ACTIVAS
+    # -------------------------------------------------------------
+    with sub_t1:
+        st.subheader("🟢 Posiciones Abiertas (Monitoreo en Tiempo Real)")
         
-    st.markdown("---")
-    st.subheader("📜 Historial de Trades Cerrados")
-    if broker.trade_history:
-        st.dataframe(pd.DataFrame(broker.trade_history)[['symbol', 'entry_price', 'exit_price', 'exit_reason', 'pnl_usdt', 'pnl_percent', 'entry_time', 'exit_time']], use_container_width=True)
-    else:
-        st.write("Aún no se han cerrado operaciones.")
+        # Actualizar precios en vivo
+        current_prices = {}
+        for pos_item in portfolio["open_positions"]:
+            sym = pos_item["symbol"]
+            t_data = tech_agent.fetch_ohlcv(symbol=sym, timeframe="5m", limit=2)
+            if not t_data.empty:
+                current_prices[sym] = float(t_data.iloc[-1]["close"])
+                
+        broker.update_and_check_positions(current_prices)
+        portfolio_updated = broker.get_portfolio_summary(current_prices)
+        
+        if portfolio_updated["open_positions"]:
+            for pos in portfolio_updated["open_positions"]:
+                pnl_col = "#0ecb81" if pos["unrealized_pnl_usdt"] >= 0 else "#f6465d"
+                with st.container():
+                    st.markdown(f"""
+                    <div class="card-opp" style="border-left: 6px solid {pnl_col};">
+                        <div style="display:flex; justify-content: space-between; font-weight: bold; font-size: 18px;">
+                            <span>{pos['symbol']} (Monto: ${pos['cost_usdt']:,.2f} USDT)</span>
+                            <span style="color: {pnl_col};">${pos['unrealized_pnl_usdt']:+,.2f} ({pos['unrealized_pnl_pct']:+.2f}%)</span>
+                        </div>
+                        <div style="font-size: 14px; margin-top: 10px; color: #94a3b8;">
+                            • Entrada: <b>${pos['entry_price']:,.4f}</b>  |  Precio Actual: <b>${pos['current_price']:,.4f}</b><br>
+                            • 🛑 <b>Stop Loss (SL):</b> <span style="color:#f87171;">${pos['stop_loss']:,.4f}</span>  |  
+                            🎯 <b>Take Profit (TP):</b> <span style="color:#4ade80;">${pos['take_profit']:,.4f}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander(f"🔴 Cerrar / Registrar Salida de {pos['symbol']}"):
+                        c_exit1, c_exit2, c_exit3 = st.columns(3)
+                        with c_exit1:
+                            exit_p = st.number_input(f"Precio de Salida (${pos['symbol']})", value=float(pos['current_price']), format="%.4f", key=f"exit_p_{pos['symbol']}")
+                        with c_exit2:
+                            exit_r = st.selectbox("Motivo de Salida", ["TAKE_PROFIT", "STOP_LOSS", "CIERRE_MANUAL"], key=f"exit_r_{pos['symbol']}")
+                        with c_exit3:
+                            st.write("")
+                            st.write("")
+                            if st.button(f"Confirmar Cierre de {pos['symbol']}", key=f"btn_close_{pos['symbol']}", type="primary"):
+                                res_close = broker.manual_close_position(pos['symbol'], exit_price=exit_p, exit_reason=exit_r)
+                                if res_close["status"] == "success":
+                                    st.success(f"Posición cerrada con PnL de ${res_close['trade']['pnl_usdt']:+,.2f} USDT")
+                                    st.rerun()
+        else:
+            st.info("No tienes posiciones activas en este momento.")
+
+    # -------------------------------------------------------------
+    # SUB-TAB 2: REGISTRAR ENTRADA MANUAL
+    # -------------------------------------------------------------
+    with sub_t2:
+        st.subheader("➕ Registrar una Operación Tomada en Binance")
+        st.caption("Si compraste directamente en Binance, registra aquí tu entrada para que el sistema le dé seguimiento.")
+        
+        with st.form("manual_entry_form"):
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                man_sym = st.selectbox("Criptomoneda", CATEGORIES["🌐 Top 50 Mercado Completo"], index=0)
+                man_entry = st.number_input("Precio de Compra (Entrada en USDT)", min_value=0.000001, value=100.0, format="%.4f")
+                man_amount_usdt = st.number_input("Monto Total Comprado (USDT)", min_value=1.0, value=10.0, step=1.0)
+            with col_m2:
+                man_sl = st.number_input("Stop Loss (SL en USDT)", min_value=0.000001, value=98.0, format="%.4f")
+                man_tp = st.number_input("Take Profit (TP en USDT)", min_value=0.000001, value=104.0, format="%.4f")
+                man_reason = st.text_input("Razón / Estrategia", value="Entrada manual según análisis de 5m")
+                
+            submit_manual = st.form_submit_button("💾 Guardar Posición en Monitoreo", type="primary", use_container_width=True)
+            if submit_manual:
+                qty = man_amount_usdt / man_entry
+                res = broker.open_buy_order(
+                    symbol=man_sym,
+                    price=man_entry,
+                    quantity=qty,
+                    stop_loss=man_sl,
+                    take_profit=man_tp,
+                    reason=man_reason
+                )
+                if res["status"] == "executed":
+                    st.success(f"¡Posición de {man_sym} guardada y en monitoreo activo!")
+                    st.rerun()
+                else:
+                    st.error(res["message"])
+
+    # -------------------------------------------------------------
+    # SUB-TAB 3: ESTADÍSTICAS & HISTORIAL
+    # -------------------------------------------------------------
+    with sub_t3:
+        st.subheader("📊 Métricas y Rendimiento Histórico")
+        
+        st1, st2, st3, st4, st5 = st.columns(5)
+        st1.metric("Total Trades", f"{portfolio['total_trades']}")
+        st2.metric("Ganadas (Wins)", f"{portfolio.get('winning_trades', 0)} 🟢")
+        st3.metric("Perdidas (Losses)", f"{portfolio.get('losing_trades', 0)} 🔴")
+        st4.metric("Win Rate", f"{portfolio['win_rate']:.1f}%")
+        st5.metric("PnL Realizado Total", f"${portfolio['total_realized_pnl_usdt']:+,.2f} USDT")
+        
+        st.markdown("---")
+        st.subheader("📜 Historial Detallado de Operaciones")
+        if broker.trade_history:
+            df_hist = pd.DataFrame(broker.trade_history)
+            st.dataframe(df_hist, use_container_width=True)
+        else:
+            st.info("El historial de operaciones cerradas está vacío.")
 
 # =========================================================================
 # TAB 4: NOTICIAS & SENTIMIENTO GLOBAL
@@ -412,4 +494,3 @@ with tab_binance_guide:
        - En **Límite**: Escribes un valor ligeramente inferior al Stop (o el mismo Stop Loss).
     3. Haces clic en **Vender**. ¡Listo! Si el precio sube al TP ganas, si baja al SL se corta la pérdida y la otra orden se cancela sola.
     """)
-
