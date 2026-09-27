@@ -1,10 +1,7 @@
 """
-Binance Live Execution & Two-Way Account Synchronizer.
-Provides:
-1. Real-time balance retrieval (USDT & Crypto assets)
-2. Automated Spot Market Buy + OCO Sell placement
-3. Two-way trade sync (Detects trades placed from Phone App or Web)
-4. Active OCO open order monitoring
+Binance Live Execution, Complete Portfolio Valuator & Real-Time Sync.
+Calculates exact account net worth across all crypto assets (SHIB, BTC, ETH, etc.)
+even when locked in open orders (OCO, Limit).
 """
 
 import ccxt
@@ -20,8 +17,8 @@ class BinanceLiveClient:
         self.api_secret = api_secret
         self.testnet = testnet
         self.is_connected = False
-        
         self.client = None
+        
         if api_key and api_secret and len(api_key) > 10:
             try:
                 self.client = ccxt.binance({
@@ -40,33 +37,123 @@ class BinanceLiveClient:
                 logger.error(f"Error initializing Binance client: {e}")
                 self.is_connected = False
 
-    def test_connection(self) -> Dict[str, Any]:
-        """Prueba si las claves API son válidas y tienen permisos correctos."""
+    def get_complete_account_valuation(self) -> Dict[str, Any]:
+        """
+        Calcula el valor patrimonial total exacto de la cuenta:
+        1. Saldo en USDT (libre y en órdenes).
+        2. Todas las criptomonedas en posesión (SHIB, BTC, SOL, BNB, etc.),
+           incluso si están bloqueadas en órdenes OCO o de venta.
+        3. Convierte cada criptomoneda a su valor actual en dólares (USDT).
+        """
         if not self.client:
-            return {"status": "error", "message": "Claves API no configuradas"}
+            return {
+                "status": "not_connected",
+                "total_equity_usdt": 0.0,
+                "cash_usdt": 0.0,
+                "crypto_value_usdt": 0.0,
+                "assets": [],
+                "open_orders": []
+            }
+            
         try:
-            balance = self.client.fetch_balance()
-            free_usdt = float(balance.get('USDT', {}).get('free', 0.0))
-            total_usdt = float(balance.get('USDT', {}).get('total', 0.0))
+            balance_raw = self.client.fetch_balance()
+            total_equity = 0.0
+            cash_usdt = 0.0
+            crypto_assets = []
+            
+            # 1. Obtener USDT directo
+            usdt_info = balance_raw.get('USDT', {})
+            free_usdt = float(usdt_info.get('free', 0.0))
+            used_usdt = float(usdt_info.get('used', 0.0))
+            cash_usdt = free_usdt + used_usdt
+            total_equity += cash_usdt
+            
+            # 2. Iterar sobre todos los activos que tengan saldo > 0
+            for currency, amounts in balance_raw.items():
+                if currency in ['USDT', 'info', 'free', 'used', 'total', 'timestamp', 'datetime']:
+                    continue
+                if not isinstance(amounts, dict):
+                    continue
+                    
+                total_coin = float(amounts.get('total', 0.0))
+                free_coin = float(amounts.get('free', 0.0))
+                used_coin = float(amounts.get('used', 0.0))
+                
+                if total_coin <= 0.00000001:
+                    continue
+                    
+                # Obtener precio actual de la moneda en USDT
+                symbol_pair = f"{currency}/USDT"
+                unit_price = 0.0
+                value_usdt = 0.0
+                
+                try:
+                    ticker = self.client.fetch_ticker(symbol_pair)
+                    unit_price = float(ticker.get('last', 0.0) or ticker.get('close', 0.0))
+                    value_usdt = total_coin * unit_price
+                except Exception:
+                    # Si no cotiza directamente contra USDT o es polvo despreciable
+                    pass
+                    
+                # Solo mostrar activos con valor relevante (> $0.05)
+                if value_usdt >= 0.05:
+                    total_equity += value_usdt
+                    crypto_assets.append({
+                        "asset": currency,
+                        "symbol": symbol_pair,
+                        "total_amount": total_coin,
+                        "free_amount": free_coin,
+                        "locked_in_orders": used_coin,
+                        "unit_price_usdt": unit_price,
+                        "value_usdt": round(value_usdt, 2)
+                    })
+                    
+            # 3. Calcular porcentaje de cada activo
+            for asset in crypto_assets:
+                asset["percentage"] = round((asset["value_usdt"] / total_equity * 100) if total_equity > 0 else 0.0, 1)
+                
+            crypto_val = total_equity - cash_usdt
+            
+            # 4. Obtener órdenes abiertas activas
+            open_orders = []
+            try:
+                raw_orders = self.client.fetch_open_orders()
+                for o in raw_orders:
+                    open_orders.append({
+                        "id": o.get("id"),
+                        "symbol": o.get("symbol"),
+                        "type": o.get("type"),
+                        "side": o.get("side").upper(),
+                        "price": float(o.get("price", 0.0)),
+                        "stop_price": float(o.get("stopPrice", 0.0) or 0.0),
+                        "amount": float(o.get("amount", 0.0)),
+                        "status": o.get("status"),
+                        "datetime": o.get("datetime")
+                    })
+            except Exception as e:
+                logger.warning(f"Could not fetch open orders: {e}")
+                
             return {
                 "status": "success",
-                "free_usdt": free_usdt,
-                "total_usdt": total_usdt,
-                "balances": {k: v['total'] for k, v in balance.items() if isinstance(v, dict) and v.get('total', 0) > 0}
+                "total_equity_usdt": round(total_equity, 2),
+                "cash_usdt": round(cash_usdt, 2),
+                "crypto_value_usdt": round(crypto_val, 2),
+                "assets": crypto_assets,
+                "open_orders": open_orders,
+                "timestamp": datetime.utcnow().isoformat()
             }
+            
         except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-    def get_real_usdt_balance(self) -> float:
-        """Obtiene el saldo libre en USDT directamente de Binance."""
-        if not self.client:
-            return 0.0
-        try:
-            balance = self.client.fetch_balance()
-            return float(balance.get('USDT', {}).get('free', 0.0))
-        except Exception as e:
-            logger.error(f"Error fetching Binance balance: {e}")
-            return 0.0
+            logger.error(f"Error fetching complete Binance valuation: {e}")
+            return {
+                "status": "error",
+                "message": str(e),
+                "total_equity_usdt": 0.0,
+                "cash_usdt": 0.0,
+                "crypto_value_usdt": 0.0,
+                "assets": [],
+                "open_orders": []
+            }
 
     def execute_spot_buy_and_oco(
         self,
@@ -75,15 +162,11 @@ class BinanceLiveClient:
         stop_loss_price: float,
         take_profit_price: float
     ) -> Dict[str, Any]:
-        """
-        1. Compra a precio de mercado el monto en USDT.
-        2. Inmediatamente coloca una orden OCO de venta con SL y TP en Binance Spot.
-        """
+        """Ejecuta compra a mercado y coloca orden OCO simultánea en Binance."""
         if not self.client:
             return {"status": "error", "message": "Binance Client no conectado"}
             
         try:
-            # 1. Ejecutar compra a mercado
             market_buy = self.client.create_order(
                 symbol=symbol,
                 type='market',
@@ -96,16 +179,13 @@ class BinanceLiveClient:
             avg_price = float(market_buy.get('average', 0.0)) or float(market_buy.get('price', 0.0))
             
             if filled_qty <= 0:
-                return {"status": "error", "message": "No se pudo comprar la cantidad solicitada en Binance"}
+                return {"status": "error", "message": "No se pudo comprar en Binance"}
                 
-            # 2. Ajustar precisión de cantidad y precios para Binance
             formatted_qty = self.client.amount_to_precision(symbol, filled_qty)
             formatted_tp = self.client.price_to_precision(symbol, take_profit_price)
             formatted_sl_trigger = self.client.price_to_precision(symbol, stop_loss_price)
-            # SL Limit ligeramente inferior para asegurar ejecución
             formatted_sl_limit = self.client.price_to_precision(symbol, stop_loss_price * 0.998)
             
-            # 3. Enviar orden OCO
             raw_symbol = symbol.replace('/', '')
             oco_res = self.client.privatePostOrderOco({
                 'symbol': raw_symbol,
@@ -130,19 +210,15 @@ class BinanceLiveClient:
                 "timestamp": datetime.utcnow().isoformat()
             }
         except Exception as e:
-            logger.error(f"Error executing Spot Buy + OCO on Binance: {e}")
             return {"status": "error", "message": str(e)}
 
     def sync_trades_from_binance(self, symbols: List[str] = None, limit: int = 15) -> List[Dict[str, Any]]:
-        """
-        Descarga el historial de compras y ventas recientes en Binance Spot,
-        detectando incluso operaciones hechas desde el móvil o la web oficial.
-        """
+        """Descarga compras y ventas recientes de Binance."""
         if not self.client:
             return []
             
         if symbols is None:
-            symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT", "ADA/USDT", "AVAX/USDT", "PEPE/USDT", "SHIB/USDT"]
+            symbols = ["SHIB/USDT", "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT", "AVAX/USDT", "PEPE/USDT"]
             
         all_my_trades = []
         for sym in symbols:
@@ -152,7 +228,7 @@ class BinanceLiveClient:
                     all_my_trades.append({
                         "id": tr.get("id"),
                         "symbol": tr.get("symbol"),
-                        "side": tr.get("side").upper(), # BUY or SELL
+                        "side": tr.get("side").upper(),
                         "price": float(tr.get("price", 0.0)),
                         "amount": float(tr.get("amount", 0.0)),
                         "cost_usdt": float(tr.get("cost", 0.0)),
@@ -160,29 +236,8 @@ class BinanceLiveClient:
                         "datetime": tr.get("datetime") or datetime.utcnow().isoformat(),
                         "timestamp": tr.get("timestamp")
                     })
-            except Exception as e:
-                logger.warning(f"No trades or error for {sym}: {e}")
+            except Exception:
+                pass
                 
-        # Ordenar por fecha más reciente primero
         all_my_trades.sort(key=lambda x: x["timestamp"] or 0, reverse=True)
         return all_my_trades
-
-    def fetch_active_oco_orders(self) -> List[Dict[str, Any]]:
-        """Obtiene las órdenes OCO activas actualmente en la cuenta de Binance."""
-        if not self.client:
-            return []
-        try:
-            open_orders = self.client.fetch_open_orders()
-            return [{
-                "id": o.get("id"),
-                "symbol": o.get("symbol"),
-                "type": o.get("type"),
-                "side": o.get("side"),
-                "price": o.get("price"),
-                "stop_price": o.get("stopPrice"),
-                "amount": o.get("amount"),
-                "status": o.get("status")
-            } for o in open_orders]
-        except Exception as e:
-            logger.error(f"Error fetching open orders: {e}")
-            return []
