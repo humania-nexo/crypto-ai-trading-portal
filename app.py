@@ -14,7 +14,16 @@ from dotenv import load_dotenv
 
 import importlib
 import src.analysis.market_scanner
+import src.execution.paper_broker
+import src.analysis.technical_agent
+import src.analysis.patterns
+import src.risk.risk_manager
+
 importlib.reload(src.analysis.market_scanner)
+importlib.reload(src.execution.paper_broker)
+importlib.reload(src.analysis.technical_agent)
+importlib.reload(src.analysis.patterns)
+importlib.reload(src.risk.risk_manager)
 
 from src.news.sentiment_agent import SentimentAgent
 from src.analysis.technical_agent import TechnicalAgent
@@ -69,7 +78,11 @@ with st.sidebar:
     user_bal = st.number_input("Saldo en USDT", min_value=1.0, max_value=1000000.0, value=float(broker.balance_usdt), step=5.0)
     if user_bal != broker.balance_usdt:
         if st.button("💾 Actualizar Saldo", use_container_width=True):
-            broker.set_custom_balance(user_bal)
+            broker.balance_usdt = round(float(user_bal), 2)
+            if hasattr(broker, 'set_custom_balance'):
+                broker.set_custom_balance(user_bal)
+            else:
+                broker.save_state()
             risk_manager.set_daily_baseline(user_bal)
             st.success(f"Saldo actualizado a ${user_bal:,.2f} USDT")
             st.rerun()
