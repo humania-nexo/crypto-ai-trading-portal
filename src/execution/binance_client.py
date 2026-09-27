@@ -1,7 +1,6 @@
 """
-Binance Live Execution, Complete Portfolio Valuator & Real-Time Sync.
-Calculates exact account net worth across all crypto assets (SHIB, BTC, ETH, etc.)
-even when locked in open orders (OCO, Limit).
+Binance Live Execution, Complete Portfolio Valuator & Real-Time Open Orders Tracker.
+Fetches active OCO and Limit orders across all assets (SHIB, etc.).
 """
 
 import ccxt
@@ -38,13 +37,7 @@ class BinanceLiveClient:
                 self.is_connected = False
 
     def get_complete_account_valuation(self) -> Dict[str, Any]:
-        """
-        Calcula el valor patrimonial total exacto de la cuenta:
-        1. Saldo en USDT (libre y en órdenes).
-        2. Todas las criptomonedas en posesión (SHIB, BTC, SOL, BNB, etc.),
-           incluso si están bloqueadas en órdenes OCO o de venta.
-        3. Convierte cada criptomoneda a su valor actual en dólares (USDT).
-        """
+        """Calcula el valor patrimonial total exacto y busca órdenes abiertas en todos los activos."""
         if not self.client:
             return {
                 "status": "not_connected",
@@ -60,15 +53,16 @@ class BinanceLiveClient:
             total_equity = 0.0
             cash_usdt = 0.0
             crypto_assets = []
+            symbols_to_check_orders = set()
             
-            # 1. Obtener USDT directo
+            # 1. Saldo USDT
             usdt_info = balance_raw.get('USDT', {})
             free_usdt = float(usdt_info.get('free', 0.0))
             used_usdt = float(usdt_info.get('used', 0.0))
             cash_usdt = free_usdt + used_usdt
             total_equity += cash_usdt
             
-            # 2. Iterar sobre todos los activos que tengan saldo > 0
+            # 2. Criptoactivos
             for currency, amounts in balance_raw.items():
                 if currency in ['USDT', 'info', 'free', 'used', 'total', 'timestamp', 'datetime']:
                     continue
@@ -82,7 +76,6 @@ class BinanceLiveClient:
                 if total_coin <= 0.00000001:
                     continue
                     
-                # Obtener precio actual de la moneda en USDT
                 symbol_pair = f"{currency}/USDT"
                 unit_price = 0.0
                 value_usdt = 0.0
@@ -92,11 +85,10 @@ class BinanceLiveClient:
                     unit_price = float(ticker.get('last', 0.0) or ticker.get('close', 0.0))
                     value_usdt = total_coin * unit_price
                 except Exception:
-                    # Si no cotiza directamente contra USDT o es polvo despreciable
                     pass
                     
-                # Solo mostrar activos con valor relevante (> $0.05)
-                if value_usdt >= 0.05:
+                if value_usdt >= 0.05 or used_coin > 0:
+                    symbols_to_check_orders.add(symbol_pair)
                     total_equity += value_usdt
                     crypto_assets.append({
                         "asset": currency,
@@ -108,30 +100,58 @@ class BinanceLiveClient:
                         "value_usdt": round(value_usdt, 2)
                     })
                     
-            # 3. Calcular porcentaje de cada activo
             for asset in crypto_assets:
                 asset["percentage"] = round((asset["value_usdt"] / total_equity * 100) if total_equity > 0 else 0.0, 1)
                 
             crypto_val = total_equity - cash_usdt
             
-            # 4. Obtener órdenes abiertas activas
+            # 3. Buscar Órdenes Abiertas consultando cada par con saldo o en OCO
             open_orders = []
+            
+            # Añadir pares comunes a chequear
+            symbols_to_check_orders.update(["SHIB/USDT", "BNB/USDT", "BTC/USDT", "SOL/USDT", "ETH/USDT"])
+            
+            for sym in symbols_to_check_orders:
+                try:
+                    pair_orders = self.client.fetch_open_orders(symbol=sym)
+                    for o in pair_orders:
+                        price = float(o.get("price", 0.0))
+                        stop_price = float(o.get("stopPrice", 0.0) or 0.0)
+                        amount = float(o.get("amount", 0.0))
+                        total_val = amount * (price if price > 0 else stop_price)
+                        
+                        raw_type = o.get("type", "").upper()
+                        order_type_display = raw_type
+                        if "STOP" in raw_type or stop_price > 0:
+                            order_type_display = "🛑 Stop Loss Limit (OCO)"
+                        elif "LIMIT" in raw_type:
+                            order_type_display = "🎯 Take Profit Limit (OCO)"
+                            
+                        open_orders.append({
+                            "id": o.get("id"),
+                            "symbol": o.get("symbol"),
+                            "type": order_type_display,
+                            "side": o.get("side", "").upper(),
+                            "price": price,
+                            "stop_price": stop_price,
+                            "amount": amount,
+                            "total_usdt": round(total_val, 2),
+                            "datetime": o.get("datetime", "")[:16].replace("T", " "),
+                            "status": o.get("status")
+                        })
+                except Exception as e:
+                    logger.debug(f"No open orders for {sym}: {e}")
+                    
+            # 4. También verificar la lista OCO global de Binance
             try:
-                raw_orders = self.client.fetch_open_orders()
-                for o in raw_orders:
-                    open_orders.append({
-                        "id": o.get("id"),
-                        "symbol": o.get("symbol"),
-                        "type": o.get("type"),
-                        "side": o.get("side").upper(),
-                        "price": float(o.get("price", 0.0)),
-                        "stop_price": float(o.get("stopPrice", 0.0) or 0.0),
-                        "amount": float(o.get("amount", 0.0)),
-                        "status": o.get("status"),
-                        "datetime": o.get("datetime")
-                    })
-            except Exception as e:
-                logger.warning(f"Could not fetch open orders: {e}")
+                raw_oco_list = self.client.privateGetOpenOrderList()
+                if raw_oco_list and isinstance(raw_oco_list, list):
+                    for oco_item in raw_oco_list:
+                        # Si hay lista OCO activa que no se haya añadido
+                        oco_orders_sub = oco_item.get("orders", [])
+                        # Ya se listan a través de fetch_open_orders(symbol)
+            except Exception:
+                pass
                 
             return {
                 "status": "success",
@@ -144,7 +164,7 @@ class BinanceLiveClient:
             }
             
         except Exception as e:
-            logger.error(f"Error fetching complete Binance valuation: {e}")
+            logger.error(f"Error in valuation: {e}")
             return {
                 "status": "error",
                 "message": str(e),
@@ -218,7 +238,7 @@ class BinanceLiveClient:
             return []
             
         if symbols is None:
-            symbols = ["SHIB/USDT", "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "DOGE/USDT", "AVAX/USDT", "PEPE/USDT"]
+            symbols = ["SHIB/USDT", "BNB/USDT", "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "DOGE/USDT", "AVAX/USDT", "PEPE/USDT"]
             
         all_my_trades = []
         for sym in symbols:

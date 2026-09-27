@@ -365,8 +365,9 @@ with tab_portfolio:
     with sub_t2:
         st.subheader("📋 Órdenes de Venta / OCO Activas en Binance")
         if real_open_orders:
-            st.markdown(f"Tienes **{len(real_open_orders)} órdenes activas** colocadas en tu cuenta de Binance:")
-            df_open = pd.DataFrame(real_open_orders)[['symbol', 'side', 'type', 'price', 'stop_price', 'amount', 'status', 'datetime']]
+            st.success(f"🟢 Se detectaron **{len(real_open_orders)} órdenes activas** colocadas en tu cuenta de Binance:")
+            df_open = pd.DataFrame(real_open_orders)[['symbol', 'type', 'side', 'price', 'stop_price', 'amount', 'total_usdt', 'datetime']]
+            df_open.columns = ['Par', 'Tipo de Orden', 'Lado', 'Precio ($)', 'Stop Trigger ($)', 'Cantidad', 'Total ($ USDT)', 'Fecha / Hora']
             st.dataframe(df_open, use_container_width=True)
         else:
             st.info("No hay órdenes abiertas en este momento en tu cuenta de Binance.")
