@@ -1,0 +1,24 @@
+# Entornos virtuales y dependencias
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Configuración y claves sensibles (NUNCA SUBIR A GITHUB)
+.env
+.env.local
+*.key
+*.pem
+
+# Archivos de estado y logs
+paper_trading_state.json
+*.log
+.system_generated/
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
