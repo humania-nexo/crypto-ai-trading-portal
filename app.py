@@ -148,6 +148,8 @@ with st.sidebar:
     risk_manager.max_risk_per_trade_pct = risk_pct
 
 # --- OBTENER VALUACIÓN PATRIMONIAL COMPLETA ---
+portfolio = broker.get_portfolio_summary()
+
 if trading_mode == "🟢 Cuenta Real de Binance" and binance_live.is_connected:
     valuation = binance_live.get_complete_account_valuation()
     total_equity_display = valuation["total_equity_usdt"]
@@ -156,7 +158,6 @@ if trading_mode == "🟢 Cuenta Real de Binance" and binance_live.is_connected:
     active_crypto_assets = valuation["assets"]
     real_open_orders = valuation["open_orders"]
 else:
-    portfolio = broker.get_portfolio_summary()
     total_equity_display = portfolio["total_equity_usdt"]
     free_cash_display = portfolio["cash_balance_usdt"]
     crypto_val_display = portfolio["unrealized_pnl_usdt"]
