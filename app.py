@@ -71,11 +71,31 @@ with st.sidebar:
     )
     tf_clean = scan_timeframe.split()[0]
     
-    watchlist_options = [
-        "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
-        "ADA/USDT", "DOGE/USDT", "AVAX/USDT", "LINK/USDT", "NEAR/USDT", "SUI/USDT", "DOT/USDT"
-    ]
-    selected_watchlist = st.multiselect("Pares a Escanear", watchlist_options, default=watchlist_options[:8])
+    category_choice = st.selectbox(
+        "Universo de Criptomonedas",
+        list(scanner.categories.keys()) + ["⚙️ Selección Manual de Pares"],
+        index=0
+    )
+    
+    if category_choice == "⚙️ Selección Manual de Pares":
+        all_possible = scanner.categories["🌐 Top 50 Mercado Completo"]
+        selected_pairs_to_scan = st.multiselect("Seleccionar Pares", all_possible, default=all_possible[:10])
+    else:
+        selected_pairs_to_scan = scanner.categories[category_choice]
+        st.caption(f"Incluye **{len(selected_pairs_to_scan)} criptomonedas** de alta liquidez.")
+        
+    st.subheader("🎯 Sensibilidad del Escáner")
+    sensitivity = st.select_slider(
+        "Filtro de Calidad",
+        options=["Amplio (Más Opciones)", "Equilibrado (Recomendado)", "Estricto (Solo Top Setups)"],
+        value="Equilibrado (Recomendado)"
+    )
+    threshold_map = {
+        "Amplio (Más Opciones)": 0.10,
+        "Equilibrado (Recomendado)": 0.18,
+        "Estricto (Solo Top Setups)": 0.35
+    }
+    score_threshold = threshold_map[sensitivity]
     
     st.subheader("🛡️ Gestión de Riesgo")
     risk_pct = st.slider("Riesgo por Operación (%)", 0.5, 3.0, 1.0, 0.1)
@@ -94,7 +114,7 @@ with st.sidebar:
 portfolio = broker.get_portfolio_summary()
 
 st.title("🎯 Radar de Oportunidades & Asesor Cripto IA")
-st.markdown("La IA escanea el mercado, analiza velas, indicadores y noticias, y te presenta las **mejores opciones de entrada con sus razones detalladas** para que tú decidas.")
+st.markdown("La IA escanea decenas de criptomonedas en paralelo, analiza velas, indicadores y noticias, y te presenta las **mejores opciones de entrada explicadas** para que tú decidas.")
 
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("💰 Balance Libre", f"${portfolio['cash_balance_usdt']:,.2f} USDT")
@@ -122,14 +142,14 @@ with tab_radar:
     with col_btn:
         run_scan = st.button("⚡ ESCANEAR MERCADO AHORA", use_container_width=True, type="primary")
     with col_info:
-        st.info(f"Escaneando **{len(selected_watchlist)} pares** en temporalidad **{tf_clean}** con datos en vivo de Binance.")
+        st.info(f"Escaneando **{len(selected_pairs_to_scan)} criptomonedas** en temporalidad **{tf_clean}** con datos en vivo de Binance (Modo: {sensitivity}).")
         
     if run_scan or "last_scan_results" not in st.session_state:
-        with st.spinner("🤖 Los agentes están analizando velas, medias móviles, RSI, MACD, noticias y calculando Stop-Loss..."):
+        with st.spinner(f"🤖 Escaneando {len(selected_pairs_to_scan)} criptomonedas simultáneamente en Binance..."):
             st.session_state.last_scan_results = scanner.scan_all_opportunities(
-                symbols=selected_watchlist,
+                symbols=selected_pairs_to_scan,
                 timeframe=tf_clean,
-                min_score_threshold=0.15
+                min_score_threshold=score_threshold
             )
             
     scan_res = st.session_state.get("last_scan_results", {})
@@ -215,9 +235,9 @@ with tab_chart:
     st.subheader("🔍 Inspección Gráfica Detallada")
     col_sel1, col_sel2 = st.columns(2)
     with col_sel1:
-        inspect_pair = st.selectbox("Seleccionar Criptomoneda para Inspección", watchlist_options, index=0)
+        inspect_pair = st.selectbox("Seleccionar Criptomoneda para Inspección", scanner.categories["🌐 Top 50 Mercado Completo"], index=0)
     with col_sel2:
-        inspect_tf = st.selectbox("Temporalidad del Gráfico", ["5m", "15m", "1h", "4h", "1d"], index=1)
+        inspect_tf = st.selectbox("Temporalidad del Gráfico", ["5m", "15m", "1h", "4h", "1d"], index=0)
         
     df_chart_raw = tech_agent.fetch_ohlcv(symbol=inspect_pair, timeframe=inspect_tf, limit=120)
     if not df_chart_raw.empty:
