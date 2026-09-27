@@ -1,5 +1,5 @@
 """
-Crypto Multi-Agent Web Portal & AI Opportunity Radar with Complete Trading Journal.
+Crypto Multi-Agent Web Portal & AI Opportunity Radar with Real Binance Live Execution & Sync.
 Built with Streamlit & Plotly.
 Run with: streamlit run app.py
 """
@@ -10,17 +10,19 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 from datetime import datetime
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 import importlib
 import src.analysis.market_scanner
 import src.execution.paper_broker
+import src.execution.binance_client
 import src.analysis.technical_agent
 import src.analysis.patterns
 import src.risk.risk_manager
 
 importlib.reload(src.analysis.market_scanner)
 importlib.reload(src.execution.paper_broker)
+importlib.reload(src.execution.binance_client)
 importlib.reload(src.analysis.technical_agent)
 importlib.reload(src.analysis.patterns)
 importlib.reload(src.risk.risk_manager)
@@ -32,12 +34,13 @@ from src.analysis.patterns import PatternDetector
 from src.analysis.market_scanner import MarketScanner, CATEGORIES
 from src.risk.risk_manager import RiskManager
 from src.execution.paper_broker import PaperBroker
+from src.execution.binance_client import BinanceLiveClient
 
 load_dotenv()
 
 # Configuración de página
 st.set_page_config(
-    page_title="Crypto AI - Radar de Oportunidades",
+    page_title="Crypto AI - Radar & Trading Real",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -57,7 +60,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Inicializar agentes
+# Inicializar agentes y clientes
 def get_agents():
     tech = TechnicalAgent(exchange_id="binance")
     sentiment = SentimentAgent(cryptopanic_api_key=os.getenv("CRYPTOPANIC_API_KEY"))
@@ -65,27 +68,64 @@ def get_agents():
     risk = RiskManager(max_risk_per_trade_pct=1.0, max_daily_loss_pct=3.0, min_risk_reward_ratio=2.0)
     risk.set_daily_baseline(broker.balance_usdt)
     scanner = MarketScanner(tech, sentiment, risk)
-    return tech, sentiment, risk, broker, scanner
+    
+    binance_live = BinanceLiveClient(
+        api_key=os.getenv("BINANCE_API_KEY", ""),
+        api_secret=os.getenv("BINANCE_API_SECRET", "")
+    )
+    return tech, sentiment, risk, broker, scanner, binance_live
 
-tech_agent, sentiment_agent, risk_manager, broker, scanner = get_agents()
+tech_agent, sentiment_agent, risk_manager, broker, scanner, binance_live = get_agents()
 
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.markdown("## 🪙 **Crypto AI Radar**")
-    st.caption("Asistente Autónomo de Análisis & Diario de Trading")
+    st.caption("Asistente Autónomo de Análisis & Trading Real")
     
-    st.subheader("💵 Configurar Saldo de Cuenta")
-    user_bal = st.number_input("Saldo en USDT", min_value=1.0, max_value=1000000.0, value=float(broker.balance_usdt), step=5.0)
-    if user_bal != broker.balance_usdt:
-        if st.button("💾 Actualizar Saldo", use_container_width=True):
-            broker.balance_usdt = round(float(user_bal), 2)
-            if hasattr(broker, 'set_custom_balance'):
-                broker.set_custom_balance(user_bal)
-            else:
-                broker.save_state()
-            risk_manager.set_daily_baseline(user_bal)
-            st.success(f"Saldo actualizado a ${user_bal:,.2f} USDT")
+    # Selector de Modo de Operación
+    st.subheader("⚡ Modo de Operación")
+    trading_mode = st.radio(
+        "Seleccionar Entorno:",
+        ["🧪 Simulación (Paper Trading)", "🟢 Cuenta Real de Binance"],
+        index=0 if not binance_live.is_connected else 1
+    )
+    
+    # Configuración de Claves API de Binance
+    with st.expander("🔑 Conexión API de Binance", expanded=not binance_live.is_connected):
+        api_k = st.text_input("Binance API Key", value=os.getenv("BINANCE_API_KEY", ""), type="password")
+        api_s = st.text_input("Binance Secret Key", value=os.getenv("BINANCE_API_SECRET", ""), type="password")
+        
+        if st.button("💾 Guardar y Conectar Binance", use_container_width=True):
+            if not os.path.exists(".env"):
+                with open(".env", "w") as f:
+                    f.write("")
+            set_key(".env", "BINANCE_API_KEY", api_k)
+            set_key(".env", "BINANCE_API_SECRET", api_s)
+            st.success("¡Claves guardadas de forma segura en local!")
             st.rerun()
+            
+        if binance_live.is_connected:
+            conn_test = binance_live.test_connection()
+            if conn_test["status"] == "success":
+                st.success(f"🟢 Conectado | Saldo Libre: ${conn_test['free_usdt']:,.2f} USDT")
+            else:
+                st.error(f"Error de conexión: {conn_test['message']}")
+        else:
+            st.info("Ingresa tus claves de Binance para activar compras reales y sincronización automática.")
+
+    # Saldo
+    if trading_mode == "🟢 Cuenta Real de Binance" and binance_live.is_connected:
+        real_bal = binance_live.get_real_usdt_balance()
+        st.metric("💵 Saldo Real Binance (USDT)", f"${real_bal:,.2f} USDT")
+        current_active_balance = real_bal
+    else:
+        st.subheader("💵 Saldo Simulado (USDT)")
+        user_bal = st.number_input("Saldo", min_value=1.0, max_value=1000000.0, value=float(broker.balance_usdt), step=5.0)
+        if user_bal != broker.balance_usdt:
+            if st.button("💾 Actualizar Saldo Simulado", use_container_width=True):
+                broker.set_custom_balance(user_bal)
+                st.rerun()
+        current_active_balance = broker.balance_usdt
 
     st.subheader("⚙️ Configuración del Escáner")
     scan_timeframe = st.selectbox(
@@ -124,24 +164,18 @@ with st.sidebar:
     st.subheader("🛡️ Gestión de Riesgo")
     risk_pct = st.slider("Riesgo por Operación (%)", 0.5, 3.0, 1.0, 0.1)
     risk_manager.max_risk_per_trade_pct = risk_pct
-    
-    st.markdown("---")
-    if st.button("🗑️ Reset Historial y Posiciones", use_container_width=True):
-        broker.open_positions = {}
-        broker.trade_history = []
-        broker.save_state()
-        st.success("Historial reiniciado correctamente.")
-        st.rerun()
 
 # --- HEADER Y MÉTRICAS DE CAPITAL ---
 portfolio = broker.get_portfolio_summary()
+effective_equity = current_active_balance if trading_mode == "🟢 Cuenta Real de Binance" else portfolio['total_equity_usdt']
 
-st.title("🎯 Radar de Oportunidades & Diario de Trading Real")
-st.markdown("La IA escanea decenas de criptomonedas en paralelo, analiza velas, indicadores y figuras chartistas, y te permite **registrar y monitorear cada entrada con sus métricas exactas**.")
+st.title("🎯 Radar de Oportunidades & Trading Automático Binance")
+mode_badge = "🟢 CUENTA REAL BINANCE ACTIVA" if trading_mode == "🟢 Cuenta Real de Binance" else "🧪 MODO SIMULACIÓN ACTIVO"
+st.caption(f"**Modo Actual:** `{mode_badge}` | Temporalidad: `{tf_clean}` | Escaneando `{len(selected_pairs_to_scan)} pares`")
 
 c1, c2, c3, c4, c5 = st.columns(5)
-c1.metric("💰 Balance Libre", f"${portfolio['cash_balance_usdt']:,.2f} USDT")
-c2.metric("🏦 Patrimonio Total", f"${portfolio['total_equity_usdt']:,.2f} USDT")
+c1.metric("💰 Balance Disponible", f"${current_active_balance:,.2f} USDT")
+c2.metric("🏦 Patrimonio Total", f"${effective_equity:,.2f} USDT")
 c3.metric("📈 PnL No Realizado", f"${portfolio['unrealized_pnl_usdt']:+,.2f} USDT")
 c4.metric("🟢 Posiciones Activas", f"{portfolio['open_positions_count']}")
 c5.metric("🏆 Win Rate Histórico", f"{portfolio['win_rate']:.1f}% ({portfolio['total_trades']} cerradas)")
@@ -151,7 +185,7 @@ st.markdown("---")
 # Pestañas principales
 tab_radar, tab_portfolio, tab_chart, tab_news, tab_binance_guide = st.tabs([
     "🎯 Radar de Oportunidades (< 30 min)",
-    "💼 Mi Portafolio & Diario de Trading",
+    "💼 Mi Portafolio & Diario de Trading (Sincronizado)",
     "📊 Inspección de Gráfico & Indicadores",
     "📰 Noticias & Sentimiento Global",
     "🛠️ Configuración Exacta en Binance"
@@ -223,42 +257,68 @@ with tab_radar:
                 p3.markdown(f"<div class='trade-pill' style='color:#4ade80;'>🎯 <b>Take Profit:</b> ${opp['take_profit']:,.4f} (+{opp['tp_percent']}%)</div>", unsafe_allow_html=True)
                 p4.markdown(f"<div class='trade-pill'>⚖️ <b>Ratio R:R:</b> 1:{opp['risk_reward_ratio']}</div>", unsafe_allow_html=True)
                 
-                # Formulario Personalizado de Entrada para el Usuario
-                with st.expander(f"📝 Tomar Entrada / Personalizar Datos para {opp['symbol']}", expanded=False):
+                # Formulario Personalizado de Entrada
+                with st.expander(f"📝 Tomar Entrada / Personalizar Orden para {opp['symbol']}", expanded=False):
                     f_col1, f_col2, f_col3, f_col4 = st.columns(4)
                     with f_col1:
                         custom_entry = st.number_input(f"Precio de Entrada (${opp['symbol']})", value=float(opp['price']), format="%.6f", key=f"in_p_{opp['symbol']}_{idx}")
                     with f_col2:
-                        custom_amount = st.number_input(f"Capital a Invertir (USDT)", min_value=1.0, value=min(10.0, float(portfolio['cash_balance_usdt'])), step=1.0, key=f"in_amt_{opp['symbol']}_{idx}")
+                        custom_amount = st.number_input(f"Capital a Invertir (USDT)", min_value=1.0, value=min(10.0, float(current_active_balance)), step=1.0, key=f"in_amt_{opp['symbol']}_{idx}")
                     with f_col3:
                         custom_sl = st.number_input(f"Stop Loss (SL)", value=float(opp['stop_loss']), format="%.6f", key=f"in_sl_{opp['symbol']}_{idx}")
                     with f_col4:
                         custom_tp = st.number_input(f"Take Profit (TP)", value=float(opp['take_profit']), format="%.6f", key=f"in_tp_{opp['symbol']}_{idx}")
                         
-                    if st.button(f"💾 Guardar y Monitorear Posición de {opp['symbol']}", key=f"btn_save_{opp['symbol']}_{idx}", type="primary", use_container_width=True):
-                        qty = custom_amount / custom_entry
-                        res = broker.open_buy_order(
-                            symbol=opp["symbol"],
-                            price=custom_entry,
-                            quantity=qty,
-                            stop_loss=custom_sl,
-                            take_profit=custom_tp,
-                            reason=f"{opp['setup_type']}"
-                        )
-                        if res["status"] == "executed":
-                            st.success(f"¡Excelente! Posición de {opp['symbol']} guardada por ${custom_amount:.2f} USDT. La puedes seguir en 'Mi Portafolio'.")
-                            st.rerun()
-                        else:
-                            st.error(res["message"])
+                    # Botón según el modo seleccionado
+                    if trading_mode == "🟢 Cuenta Real de Binance" and binance_live.is_connected:
+                        if st.button(f"⚡ COMPRAR Y ENVIAR ORDEN OCO A BINANCE ({opp['symbol']})", key=f"btn_live_{opp['symbol']}_{idx}", type="primary", use_container_width=True):
+                            with st.spinner(f"Enviando orden de compra por ${custom_amount:.2f} USDT y orden OCO a Binance Spot..."):
+                                exec_res = binance_live.execute_spot_buy_and_oco(
+                                    symbol=opp["symbol"],
+                                    usdt_amount=custom_amount,
+                                    stop_loss_price=custom_sl,
+                                    take_profit_price=custom_tp
+                                )
+                                if exec_res["status"] == "success":
+                                    st.success(f"🎉 ¡Orden Real Ejecutada en Binance! Comprado a ${exec_res['entry_price']:,.4f}. Orden OCO colocada con éxito.")
+                                    # Registrar en el seguimiento
+                                    broker.open_buy_order(
+                                        symbol=opp["symbol"],
+                                        price=exec_res["entry_price"],
+                                        quantity=exec_res["quantity"],
+                                        stop_loss=custom_sl,
+                                        take_profit=custom_tp,
+                                        reason=f"Binance Real: {opp['setup_type']}"
+                                    )
+                                    st.rerun()
+                                else:
+                                    st.error(f"Error al enviar orden a Binance: {exec_res['message']}")
+                    else:
+                        if st.button(f"💾 Guardar Posición Simulada ({opp['symbol']})", key=f"btn_save_{opp['symbol']}_{idx}", type="primary", use_container_width=True):
+                            qty = custom_amount / custom_entry
+                            res = broker.open_buy_order(
+                                symbol=opp["symbol"],
+                                price=custom_entry,
+                                quantity=qty,
+                                stop_loss=custom_sl,
+                                take_profit=custom_tp,
+                                reason=f"{opp['setup_type']}"
+                            )
+                            if res["status"] == "executed":
+                                st.success(f"¡Posición de {opp['symbol']} guardada por ${custom_amount:.2f} USDT! Monitoreándose en 'Mi Portafolio'.")
+                                st.rerun()
+                            else:
+                                st.error(res["message"])
                 st.markdown("---")
 
 # =========================================================================
-# TAB 2: MI PORTAFOLIO & DIARIO DE TRADING REAL
+# TAB 2: MI PORTAFOLIO & DIARIO DE TRADING REAL (SINCRONIZADO)
 # =========================================================================
 with tab_portfolio:
-    sub_t1, sub_t2, sub_t3 = st.tabs([
+    sub_t1, sub_t2, sub_t3, sub_t4 = st.tabs([
         "🟢 Posiciones Activas en Monitoreo",
-        "➕ Registrar Entrada Manual (Cualquier Moneda)",
+        "🔄 Sincronizar Operaciones de Binance (App/Web)",
+        "➕ Registrar Entrada Manual",
         "📊 Estadísticas & Historial Completo"
     ])
     
@@ -313,14 +373,40 @@ with tab_portfolio:
                                     st.success(f"¡Trade cerrado! PnL Realizado: ${res_close['trade']['pnl_usdt']:+,.2f} USDT ({res_close['trade']['pnl_percent']:+.2f}%)")
                                     st.rerun()
         else:
-            st.info("No tienes posiciones activas en este momento. Escanea el mercado en la pestaña 1 o registra una entrada manual abajo.")
+            st.info("No tienes posiciones activas en este momento.")
 
     # -------------------------------------------------------------
-    # SUB-TAB 2: REGISTRAR ENTRADA MANUAL
+    # SUB-TAB 2: SINCRONIZADOR BINANCE (APP / WEB)
     # -------------------------------------------------------------
     with sub_t2:
-        st.subheader("➕ Registrar una Operación Tomada en Binance")
-        st.caption("Si compraste cualquier criptomoneda directamente en Binance, ingresa aquí los datos exactos para llevar el seguimiento:")
+        st.subheader("🔄 Sincronización Automática con Binance")
+        st.markdown("""
+        Si compraste o vendiste directamente desde la **aplicación móvil de Binance o la página web**, presiona este botón para importar y registrar tus órdenes automáticamente:
+        """)
+        
+        if not binance_live.is_connected:
+            st.warning("Para sincronizar automáticamente, conecta tus claves API en la barra lateral izquierda.")
+        else:
+            if st.button("📥 Importar Mis Operaciones Recientes de Binance", type="primary"):
+                with st.spinner("Descargando historial de transacciones desde tu cuenta de Binance..."):
+                    imported_trades = binance_live.sync_trades_from_binance(limit=20)
+                    st.session_state.binance_synced_trades = imported_trades
+                    if imported_trades:
+                        st.success(f"¡Se descargaron {len(imported_trades)} operaciones recientes de tu cuenta de Binance!")
+                    else:
+                        st.info("No se encontraron operaciones recientes en los pares principales.")
+                        
+            if "binance_synced_trades" in st.session_state and st.session_state.binance_synced_trades:
+                st.write("**Operaciones detectadas en tu cuenta de Binance:**")
+                df_sync = pd.DataFrame(st.session_state.binance_synced_trades)[['datetime', 'symbol', 'side', 'price', 'amount', 'cost_usdt']]
+                st.dataframe(df_sync, use_container_width=True)
+
+    # -------------------------------------------------------------
+    # SUB-TAB 3: REGISTRAR ENTRADA MANUAL
+    # -------------------------------------------------------------
+    with sub_t3:
+        st.subheader("➕ Registrar una Operación Manualmente")
+        st.caption("Si deseas ingresar manualmente los datos de una compra:")
         
         with st.form("manual_entry_form"):
             col_m1, col_m2 = st.columns(2)
@@ -351,9 +437,9 @@ with tab_portfolio:
                     st.error(res["message"])
 
     # -------------------------------------------------------------
-    # SUB-TAB 3: ESTADÍSTICAS & HISTORIAL
+    # SUB-TAB 4: ESTADÍSTICAS & HISTORIAL
     # -------------------------------------------------------------
-    with sub_t3:
+    with sub_t4:
         st.subheader("📊 Métricas de Desempeño & Historial de Trades")
         
         st1, st2, st3, st4, st5 = st.columns(5)
@@ -369,7 +455,7 @@ with tab_portfolio:
             df_hist = pd.DataFrame(broker.trade_history)[['symbol', 'entry_price', 'exit_price', 'exit_reason', 'pnl_usdt', 'pnl_percent', 'entry_time', 'exit_time', 'signal_reason']]
             st.dataframe(df_hist, use_container_width=True)
         else:
-            st.info("El historial de operaciones cerradas está vacío. Cuando cierres tu primera operación, aparecerán aquí todas tus estadísticas.")
+            st.info("El historial de operaciones cerradas está vacío.")
 
 # =========================================================================
 # TAB 3: INSPECCIÓN DETALLADA DE GRÁFICO
