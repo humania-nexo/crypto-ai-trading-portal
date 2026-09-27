@@ -1,11 +1,12 @@
 """
-Crypto Multi-Agent Web Portal & AI Opportunity Radar with Complete Real Binance Valuation & Asset Breakdown.
+Crypto Multi-Agent Web Portal & AI Opportunity Radar with Complete Performance Analytics & Trading Journal.
 Built with Streamlit & Plotly.
 Run with: streamlit run app.py
 """
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
@@ -57,6 +58,8 @@ st.markdown("""
     .badge-high { background-color: rgba(14, 203, 129, 0.15); color: #0ecb81; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 13px; border: 1px solid #0ecb81; }
     .badge-med { background-color: rgba(240, 185, 11, 0.15); color: #f0b90b; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 13px; border: 1px solid #f0b90b; }
     .trade-pill { background-color: #1c2331; padding: 8px 14px; border-radius: 8px; font-size: 13px; border: 1px solid #2b354b; margin-right: 8px; }
+    .badge-win { background-color: rgba(14, 203, 129, 0.2); color: #0ecb81; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
+    .badge-loss { background-color: rgba(246, 70, 93, 0.2); color: #f6465d; padding: 3px 8px; border-radius: 4px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -179,9 +182,10 @@ c5.metric("📋 Órdenes Abiertas Binance", f"{len(real_open_orders)} órdenes")
 st.markdown("---")
 
 # Pestañas principales
-tab_radar, tab_portfolio, tab_chart, tab_news, tab_binance_guide = st.tabs([
+tab_radar, tab_portfolio, tab_analytics, tab_chart, tab_news, tab_binance_guide = st.tabs([
     "🎯 Radar de Oportunidades (< 30 min)",
     "💼 Mi Portafolio & Activos en Binance",
+    "📈 Métricas & Historial de Desempeño",
     "📊 Inspección de Gráfico & Indicadores",
     "📰 Noticias & Sentimiento Global",
     "🛠️ Configuración Exacta en Binance"
@@ -289,7 +293,7 @@ with tab_radar:
                                 else:
                                     st.error(f"Error al enviar orden a Binance: {exec_res['message']}")
                     else:
-                        if st.button(f"💾 Guardar Posición Simulada ({opp['symbol']})", key=f"btn_save_{opp['symbol']}_{idx}", type="primary", use_container_width=True):
+                        if st.button(f"💾 Guardar Posición ({opp['symbol']})", key=f"btn_save_{opp['symbol']}_{idx}", type="primary", use_container_width=True):
                             qty = custom_amount / custom_entry
                             res = broker.open_buy_order(
                                 symbol=opp["symbol"],
@@ -313,8 +317,8 @@ with tab_portfolio:
     sub_t1, sub_t2, sub_t3, sub_t4 = st.tabs([
         "🪙 Mis Criptomonedas en Posesión",
         "📋 Órdenes Abiertas en Binance (OCO / Limit)",
-        "🔄 Sincronizar Historial de Trades (App/Web)",
-        "📊 Estadísticas & Historial Cerrado"
+        "🟢 Posiciones en Seguimiento Activo",
+        "➕ Registrar Entrada Manual"
     ])
     
     # -------------------------------------------------------------
@@ -368,51 +372,204 @@ with tab_portfolio:
             st.info("No hay órdenes abiertas en este momento en tu cuenta de Binance.")
 
     # -------------------------------------------------------------
-    # SUB-TAB 3: SINCRONIZADOR BINANCE (APP / WEB)
+    # SUB-TAB 3: POSICIONES EN SEGUIMIENTO
     # -------------------------------------------------------------
     with sub_t3:
-        st.subheader("🔄 Sincronización Automática con Binance")
-        st.markdown("""
-        Presiona el botón para descargar las compras y ventas ejecutadas recientemente desde tu móvil o la web:
-        """)
-        if not binance_live.is_connected:
-            st.warning("Conecta tus claves API en la barra lateral para sincronizar.")
+        st.subheader("🟢 Posiciones en Seguimiento Activo")
+        
+        current_prices = {}
+        for pos_item in portfolio["open_positions"]:
+            sym = pos_item["symbol"]
+            t_data = tech_agent.fetch_ohlcv(symbol=sym, timeframe="5m", limit=2)
+            if not t_data.empty:
+                current_prices[sym] = float(t_data.iloc[-1]["close"])
+                
+        broker.update_and_check_positions(current_prices)
+        portfolio_updated = broker.get_portfolio_summary(current_prices)
+        
+        if portfolio_updated["open_positions"]:
+            for pos in portfolio_updated["open_positions"]:
+                pnl_col = "#0ecb81" if pos["unrealized_pnl_usdt"] >= 0 else "#f6465d"
+                with st.container():
+                    st.markdown(f"""
+                    <div class="card-opp" style="border-left: 6px solid {pnl_col};">
+                        <div style="display:flex; justify-content: space-between; font-weight: bold; font-size: 18px;">
+                            <span>{pos['symbol']} (Monto Invertido: ${pos['cost_usdt']:,.2f} USDT)</span>
+                            <span style="color: {pnl_col};">${pos['unrealized_pnl_usdt']:+,.2f} ({pos['unrealized_pnl_pct']:+.2f}%)</span>
+                        </div>
+                        <div style="font-size: 14px; margin-top: 10px; color: #94a3b8;">
+                            • Entrada: <b>${pos['entry_price']:,.4f}</b>  |  Precio Actual Binance: <b>${pos['current_price']:,.4f}</b><br>
+                            • 🛑 <b>Stop Loss (SL):</b> <span style="color:#f87171;">${pos['stop_loss']:,.4f}</span>  |  
+                            🎯 <b>Take Profit (TP):</b> <span style="color:#4ade80;">${pos['take_profit']:,.4f}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander(f"🔴 Registrar Salida / Cerrar Trade de {pos['symbol']}", expanded=True):
+                        st.markdown(f"**Registra a qué precio vendiste en Binance para calcular tu ganancia/pérdida real:**")
+                        c_exit1, c_exit2, c_exit3 = st.columns(3)
+                        with c_exit1:
+                            exit_p = st.number_input(f"Precio de Venta Real (${pos['symbol']})", value=float(pos['current_price']), format="%.6f", key=f"exit_p_{pos['symbol']}")
+                        with c_exit2:
+                            exit_r = st.selectbox("Motivo de Salida", ["TAKE_PROFIT (Ganancia)", "STOP_LOSS (Pérdida Cortada)", "CIERRE_MANUAL"], key=f"exit_r_{pos['symbol']}")
+                        with c_exit3:
+                            st.write("")
+                            st.write("")
+                            if st.button(f"✅ Confirmar Cierre de {pos['symbol']}", key=f"btn_close_{pos['symbol']}", type="primary", use_container_width=True):
+                                res_close = broker.manual_close_position(pos['symbol'], exit_price=exit_p, exit_reason=exit_r)
+                                if res_close["status"] == "success":
+                                    st.success(f"¡Trade cerrado! PnL Realizado: ${res_close['trade']['pnl_usdt']:+,.2f} USDT ({res_close['trade']['pnl_percent']:+.2f}%)")
+                                    st.rerun()
         else:
-            if st.button("📥 Descargar Transacciones Recientes de Binance", type="primary"):
-                with st.spinner("Descargando transacciones de Binance..."):
-                    imported_trades = binance_live.sync_trades_from_binance(limit=20)
-                    st.session_state.binance_synced_trades = imported_trades
-                    if imported_trades:
-                        st.success(f"¡Se descargaron {len(imported_trades)} operaciones de Binance!")
-                    else:
-                        st.info("No se encontraron operaciones recientes.")
-                        
-            if "binance_synced_trades" in st.session_state and st.session_state.binance_synced_trades:
-                df_sync = pd.DataFrame(st.session_state.binance_synced_trades)[['datetime', 'symbol', 'side', 'price', 'amount', 'cost_usdt']]
-                st.dataframe(df_sync, use_container_width=True)
+            st.info("No tienes posiciones activas en seguimiento en este momento.")
 
     # -------------------------------------------------------------
-    # SUB-TAB 4: ESTADÍSTICAS & HISTORIAL
+    # SUB-TAB 4: REGISTRAR ENTRADA MANUAL
     # -------------------------------------------------------------
     with sub_t4:
-        st.subheader("📊 Métricas de Rendimiento Histórico")
-        st1, st2, st3, st4, st5 = st.columns(5)
-        st1.metric("Total Operaciones", f"{portfolio['total_trades']}")
-        st2.metric("Ganadas (Wins)", f"{portfolio.get('winning_trades', 0)} 🟢")
-        st3.metric("Perdidas (Losses)", f"{portfolio.get('losing_trades', 0)} 🔴")
-        st4.metric("Tasa de Acierto", f"{portfolio['win_rate']:.1f}%")
-        st5.metric("PnL Realizado Total", f"${portfolio['total_realized_pnl_usdt']:+,.2f} USDT")
-        
-        st.markdown("---")
-        st.subheader("📜 Historial de Operaciones")
-        if broker.trade_history:
-            df_hist = pd.DataFrame(broker.trade_history)[['symbol', 'entry_price', 'exit_price', 'exit_reason', 'pnl_usdt', 'pnl_percent', 'entry_time', 'exit_time', 'signal_reason']]
-            st.dataframe(df_hist, use_container_width=True)
-        else:
-            st.info("El historial está vacío.")
+        st.subheader("➕ Registrar una Operación Manualmente")
+        with st.form("manual_entry_form"):
+            col_m1, col_m2 = st.columns(2)
+            with col_m1:
+                man_sym = st.selectbox("Criptomoneda", CATEGORIES["🌐 Top 50 Mercado Completo"], index=0)
+                man_entry = st.number_input("Precio de Compra (Entrada en USDT)", min_value=0.000001, value=100.0, format="%.6f")
+                man_amount_usdt = st.number_input("Monto Total Invertido (USDT)", min_value=1.0, value=10.0, step=1.0)
+            with col_m2:
+                man_sl = st.number_input("Stop Loss (SL en USDT)", min_value=0.000001, value=98.0, format="%.6f")
+                man_tp = st.number_input("Take Profit (TP en USDT)", min_value=0.000001, value=104.0, format="%.6f")
+                man_reason = st.text_input("Razón / Estrategia", value="Entrada en Binance según análisis de 5m")
+                
+            submit_manual = st.form_submit_button("💾 Guardar y Empezar Monitoreo", type="primary", use_container_width=True)
+            if submit_manual:
+                qty = man_amount_usdt / man_entry
+                res = broker.open_buy_order(
+                    symbol=man_sym,
+                    price=man_entry,
+                    quantity=qty,
+                    stop_loss=man_sl,
+                    take_profit=man_tp,
+                    reason=man_reason
+                )
+                if res["status"] == "executed":
+                    st.success(f"¡Posición de {man_sym} registrada por ${man_amount_usdt:.2f} USDT!")
+                    st.rerun()
+                else:
+                    st.error(res["message"])
 
 # =========================================================================
-# TAB 3: INSPECCIÓN DETALLADA DE GRÁFICO
+# TAB 3: MÉTRICAS & HISTORIAL DE DESEMPEÑO (ANALYTICS AVANZADO)
+# =========================================================================
+with tab_analytics:
+    st.subheader("📈 Panel de Rendimiento y Estadísticas Históricas")
+    
+    trades = broker.trade_history
+    
+    if not trades:
+        st.info("💡 Aún no tienes operaciones cerradas registradas. En cuanto tomes una entrada y la cierres (por Take Profit o Stop Loss), aquí verás tus curvas de rendimiento, Win Rate, factor de beneficio y análisis detallado.")
+    else:
+        winning_trades = [t for t in trades if t.get("pnl_usdt", 0) > 0]
+        losing_trades = [t for t in trades if t.get("pnl_usdt", 0) <= 0]
+        
+        total_pnl = sum([t.get("pnl_usdt", 0) for t in trades])
+        win_rate = (len(winning_trades) / len(trades) * 100) if trades else 0.0
+        
+        gross_profit = sum([t.get("pnl_usdt", 0) for t in winning_trades])
+        gross_loss = abs(sum([t.get("pnl_usdt", 0) for t in losing_trades]))
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 1.0)
+        
+        avg_win = (gross_profit / len(winning_trades)) if winning_trades else 0.0
+        avg_loss = (gross_loss / len(losing_trades)) if losing_trades else 0.0
+        
+        best_trade = max([t.get("pnl_usdt", 0) for t in trades])
+        worst_trade = min([t.get("pnl_usdt", 0) for t in trades])
+        
+        # 1. Fila de Tarjetas de Rendimiento Clave
+        s1, s2, s3, s4, s5 = st.columns(5)
+        s1.metric("📦 Operaciones Cerradas", f"{len(trades)}")
+        s2.metric("🟢 Trades Ganadores", f"{len(winning_trades)} ({win_rate:.1f}%)")
+        s3.metric("🔴 Trades Perdedores", f"{len(losing_trades)}")
+        s4.metric("💰 Ganancia Neta Total", f"${total_pnl:+,.2f} USDT")
+        s5.metric("⚖️ Factor de Beneficio", f"{profit_factor:.2f}")
+        
+        s6, s7, s8, s9 = st.columns(4)
+        s6.metric("🎯 Ganancia Promedio (Win)", f"+${avg_win:.2f} USDT")
+        s7.metric("🛑 Pérdida Promedio (Loss)", f"-${avg_loss:.2f} USDT")
+        s8.metric("🚀 Mejor Operación", f"+${best_trade:.2f} USDT")
+        s9.metric("⚠️ Peor Operación", f"${worst_trade:.2f} USDT")
+        
+        st.markdown("---")
+        
+        # 2. Gráficos Visuales de Rendimiento (Curva de Capital + Donut de Aciertos)
+        col_c1, col_c2 = st.columns([2, 1])
+        
+        with col_c1:
+            st.subheader("📈 Curva de Crecimiento de Capital (Evolución PnL)")
+            
+            # Construir datos acumulados
+            cum_pnl = np.cumsum([t.get("pnl_usdt", 0) for t in trades])
+            trade_indices = [f"Trade #{i+1} ({t['symbol']})" for i, t in enumerate(trades)]
+            
+            fig_curve = go.Figure()
+            fig_curve.add_trace(go.Scatter(
+                x=trade_indices,
+                y=cum_pnl,
+                mode='lines+markers',
+                line=dict(color='#0ecb81' if total_pnl >= 0 else '#f6465d', width=3),
+                marker=dict(size=8, color='#f0b90b'),
+                fill='tozeroy',
+                fillcolor='rgba(14, 203, 129, 0.1)' if total_pnl >= 0 else 'rgba(246, 70, 93, 0.1)',
+                name='PnL Acumulado'
+            ))
+            fig_curve.add_hline(y=0, line_dash="dash", line_color="gray")
+            fig_curve.update_layout(
+                height=280,
+                margin=dict(l=10, r=10, t=10, b=10),
+                paper_bgcolor="#151a23",
+                plot_bgcolor="#0e131b",
+                font={'color': "#d1d4dc"}
+            )
+            st.plotly_chart(fig_curve, use_container_width=True)
+            
+        with col_c2:
+            st.subheader("🎯 Proporción de Aciertos")
+            fig_donut = go.Figure(data=[go.Pie(
+                labels=['Ganadas (Wins)', 'Perdidas (Losses)'],
+                values=[len(winning_trades), len(losing_trades)],
+                hole=.5,
+                marker=dict(colors=['#0ecb81', '#f6465d'])
+            )])
+            fig_donut.update_layout(
+                height=280,
+                margin=dict(l=10, r=10, t=10, b=10),
+                paper_bgcolor="#151a23",
+                font={'color': "white"}
+            )
+            st.plotly_chart(fig_donut, use_container_width=True)
+            
+        st.markdown("---")
+        
+        # 3. Tabla Completa de Historial de Operaciones
+        st.subheader("📜 Diario y Registro Detallado de Cada Trade")
+        
+        df_display = []
+        for i, t in enumerate(trades):
+            is_win = t.get("pnl_usdt", 0) > 0
+            df_display.append({
+                "#": i + 1,
+                "Fecha / Hora": t.get("exit_time", "")[:16].replace("T", " "),
+                "Criptomoneda": t.get("symbol", ""),
+                "Entrada": f"${t.get('entry_price', 0):,.6f}",
+                "Salida": f"${t.get('exit_price', 0):,.6f}",
+                "Motivo de Cierre": t.get("exit_reason", ""),
+                "Resultado PnL ($)": f"{'+' if is_win else ''}${t.get('pnl_usdt', 0):.4f} USDT",
+                "Retorno (%)": f"{'+' if is_win else ''}{t.get('pnl_percent', 0):.2f}%",
+                "Estrategia": t.get("signal_reason", "")
+            })
+            
+        st.dataframe(pd.DataFrame(df_display), use_container_width=True)
+
+# =========================================================================
+# TAB 4: INSPECCIÓN DETALLADA DE GRÁFICO
 # =========================================================================
 with tab_chart:
     st.subheader("🔍 Inspección Gráfica Detallada")
@@ -456,7 +613,7 @@ with tab_chart:
         st.plotly_chart(fig, use_container_width=True)
 
 # =========================================================================
-# TAB 4: NOTICIAS & SENTIMIENTO GLOBAL
+# TAB 5: NOTICIAS & SENTIMIENTO GLOBAL
 # =========================================================================
 with tab_news:
     st.subheader("🧭 Contexto Fundamental y Sentimiento Global")
@@ -496,7 +653,7 @@ with tab_news:
             """, unsafe_allow_html=True)
 
 # =========================================================================
-# TAB 5: GUÍA DE CONFIGURACIÓN PASO A PASO EN BINANCE
+# TAB 6: GUÍA DE CONFIGURACIÓN PASO A PASO EN BINANCE
 # =========================================================================
 with tab_binance_guide:
     st.subheader("🛠️ Cómo Configurar tu Gráfico de Binance para ver lo mismo que la IA")
