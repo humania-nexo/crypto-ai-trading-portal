@@ -124,9 +124,23 @@ class MarketScanner:
             if patterns:
                 for p in patterns:
                     if p["bias"] == "BULLISH":
-                        reasons_technical.append(f"🕯️ **Giro Alcista (Acción de Precio)**: {p['pattern']} ({p['description']})")
-                        setup_type = f"Reversión Confirmada por Vela ({p['pattern']})"
-                        
+                        reasons_technical.append(f"🕯️ **Giro Alcista (Vela)**: {p['pattern']} ({p['description']})")
+                        if setup_type == "Sin patrón claro":
+                            setup_type = f"Vela Alcista ({p['pattern']})"
+                            
+            # Formaciones Chartistas Estructurales (Doble Suelo, HCH Invertido, Banderines)
+            chart_forms = analysis.get("chart_formations", [])
+            if chart_forms:
+                for f in chart_forms:
+                    reasons_technical.append(f"📐 **Figura Chartista Detectada**: **{f['name']}** - {f['description']}")
+                    setup_type = f"Figura Chartista: {f['name']}"
+                    
+            # Soportes y Resistencias Históricos Multi-Toque
+            sup_clusters = levels.get("support_clusters", [])
+            if sup_clusters:
+                best_sup = sup_clusters[0]
+                reasons_technical.append(f"🧱 **Soporte Histórico Fuerte**: Nivel en ${best_sup['level']:,.2f} con **{best_sup['touches']} toques/rebotes históricos** confirmados.")
+                    
             # Volumen
             if signals.get("volume_spike"):
                 reasons_technical.append("🔥 **Inyección de Volumen**: Fuerte entrada de capital en velas recientes.")

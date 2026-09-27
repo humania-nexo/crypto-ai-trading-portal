@@ -31,61 +31,65 @@ class TechnicalAgent:
             return pd.DataFrame()
 
     def analyze_pair(self, symbol: str = "BTC/USDT", timeframe: str = "15m") -> Dict[str, Any]:
-        """Realiza el análisis técnico completo de un par."""
+        """Realiza el análisis técnico completo de un par (Indicadores + Velas + Figuras Chartistas)."""
         df = self.fetch_ohlcv(symbol=symbol, timeframe=timeframe, limit=120)
         if df.empty or len(df) < 50:
             return {"status": "error", "message": f"Insuficientes datos para {symbol}"}
             
         df_indicators = TechnicalIndicators.calculate_all(df)
         signals = TechnicalIndicators.get_latest_signal_summary(df_indicators)
-        patterns = PatternDetector.identify_candlestick_patterns(df_indicators)
-        levels = PatternDetector.calculate_support_resistance(df_indicators)
+        candlestick_patterns = PatternDetector.identify_candlestick_patterns(df_indicators)
+        chart_formations = PatternDetector.identify_chart_formations(df_indicators)
+        levels = PatternDetector.calculate_historical_supports_resistances(df_indicators)
         
         # Scoring técnico (-1.0 a +1.0)
         score = 0.0
         
-        # Tendencia
+        # 1. Tendencia
         if signals.get("trend") == "STRONG_BULLISH":
-            score += 0.4
+            score += 0.35
         elif signals.get("trend") == "BULLISH":
-            score += 0.2
+            score += 0.20
         elif signals.get("trend") == "STRONG_BEARISH":
-            score -= 0.4
+            score -= 0.40
         elif signals.get("trend") == "BEARISH":
-            score -= 0.2
+            score -= 0.20
             
-        # MACD
+        # 2. MACD
         if signals.get("macd_crossover") == "BULLISH_CROSS":
-            score += 0.3
+            score += 0.25
         elif signals.get("macd_crossover") == "BEARISH_CROSS":
-            score -= 0.3
+            score -= 0.25
         elif signals.get("macd_hist", 0) > 0:
-            score += 0.1
+            score += 0.10
         else:
-            score -= 0.1
+            score -= 0.10
             
-        # RSI
+        # 3. RSI
         rsi = signals.get("rsi", 50)
-        if 40 <= rsi <= 60:
-            score += 0.05 # Zona neutral/saludable
-        elif rsi < 30:
-            score += 0.2 # Posible rebote por sobreventa
+        if 45 <= rsi <= 62:
+            score += 0.10 # Zona de impulso óptimo
+        elif rsi <= 35:
+            score += 0.25 # Zona de sobreventa/descuento
         elif rsi > 70:
-            score -= 0.2 # Posible agotamiento por sobrecompra
+            score -= 0.25 # Sobrecompra
             
-        # Patrones de velas
-        for p in patterns:
+        # 4. Formaciones Chartistas (Doble Suelo, HCH invertido, Banderines)
+        for form in chart_formations:
+            if "ALCISTA" in form["type"] or "MOMENTUM" in form["type"]:
+                score += 0.35 # Fuerte impulso cuantitativo por figura chartista
+                
+        # 5. Patrones de velas
+        for p in candlestick_patterns:
             if p["bias"] == "BULLISH":
-                score += 0.2 if p["strength"] == "HIGH" else 0.1
-            elif p["bias"] == "BEARISH":
-                score -= 0.2 if p["strength"] == "HIGH" else 0.1
+                score += 0.15
                 
         # Normalizar score entre -1.0 y 1.0
         normalized_score = max(-1.0, min(1.0, score))
         
-        if normalized_score >= 0.35:
+        if normalized_score >= 0.30:
             bias = "BUY"
-        elif normalized_score <= -0.35:
+        elif normalized_score <= -0.30:
             bias = "SELL"
         else:
             bias = "HOLD / NEUTRAL"
@@ -97,7 +101,8 @@ class TechnicalAgent:
             "bias": bias,
             "technical_score": round(normalized_score, 2),
             "signals": signals,
-            "patterns": patterns,
+            "patterns": candlestick_patterns,
+            "chart_formations": chart_formations,
             "levels": levels,
             "status": "success"
         }
