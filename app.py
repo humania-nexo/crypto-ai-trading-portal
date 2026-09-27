@@ -16,7 +16,7 @@ from src.news.sentiment_agent import SentimentAgent
 from src.analysis.technical_agent import TechnicalAgent
 from src.analysis.indicators import TechnicalIndicators
 from src.analysis.patterns import PatternDetector
-from src.analysis.market_scanner import MarketScanner
+from src.analysis.market_scanner import MarketScanner, CATEGORIES
 from src.risk.risk_manager import RiskManager
 from src.execution.paper_broker import PaperBroker
 
@@ -45,7 +45,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Inicializar agentes
-@st.cache_resource
 def get_agents():
     tech = TechnicalAgent(exchange_id="binance")
     sentiment = SentimentAgent(cryptopanic_api_key=os.getenv("CRYPTOPANIC_API_KEY"))
@@ -73,15 +72,15 @@ with st.sidebar:
     
     category_choice = st.selectbox(
         "Universo de Criptomonedas",
-        list(scanner.categories.keys()) + ["⚙️ Selección Manual de Pares"],
+        list(CATEGORIES.keys()) + ["⚙️ Selección Manual de Pares"],
         index=0
     )
     
     if category_choice == "⚙️ Selección Manual de Pares":
-        all_possible = scanner.categories["🌐 Top 50 Mercado Completo"]
+        all_possible = CATEGORIES["🌐 Top 50 Mercado Completo"]
         selected_pairs_to_scan = st.multiselect("Seleccionar Pares", all_possible, default=all_possible[:10])
     else:
-        selected_pairs_to_scan = scanner.categories[category_choice]
+        selected_pairs_to_scan = CATEGORIES[category_choice]
         st.caption(f"Incluye **{len(selected_pairs_to_scan)} criptomonedas** de alta liquidez.")
         
     st.subheader("🎯 Sensibilidad del Escáner")
@@ -235,7 +234,7 @@ with tab_chart:
     st.subheader("🔍 Inspección Gráfica Detallada")
     col_sel1, col_sel2 = st.columns(2)
     with col_sel1:
-        inspect_pair = st.selectbox("Seleccionar Criptomoneda para Inspección", scanner.categories["🌐 Top 50 Mercado Completo"], index=0)
+        inspect_pair = st.selectbox("Seleccionar Criptomoneda para Inspección", CATEGORIES["🌐 Top 50 Mercado Completo"], index=0)
     with col_sel2:
         inspect_tf = st.selectbox("Temporalidad del Gráfico", ["5m", "15m", "1h", "4h", "1d"], index=0)
         
