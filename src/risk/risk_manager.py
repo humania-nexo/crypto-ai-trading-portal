@@ -92,13 +92,13 @@ class RiskManager:
         
         return {
             "symbol": symbol,
-            "entry_price": round(entry_price, 4),
-            "stop_loss": round(stop_loss_price, 4),
-            "take_profit": round(take_profit_price, 4),
+            "entry_price": round(entry_price, 8),
+            "stop_loss": round(stop_loss_price, 8),
+            "take_profit": round(take_profit_price, 8),
             "risk_reward_ratio": round(tp_distance / sl_distance, 2),
             "sl_percent": round((sl_distance / entry_price) * 100, 2),
             "tp_percent": round((tp_distance / entry_price) * 100, 2),
             "position_size_usdt": round(position_size_usdt, 2),
-            "quantity": round(quantity, 6),
+            "quantity": round(quantity, 8),
             "max_risk_usdt": round(position_size_usdt * (sl_distance / entry_price), 2)
         }

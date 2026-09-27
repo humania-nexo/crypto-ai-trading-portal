@@ -584,12 +584,31 @@ with tab_analytics:
         if eq_data:
             df_eq = pd.DataFrame(eq_data)
             fig_j = go.Figure()
-            fig_j.add_trace(go.Scatter(x=df_eq["date"], y=df_eq["equity"], mode="lines+markers", line=dict(color="#0ecb81", width=2)))
-            fig_j.update_layout(title="Curva de Crecimiento de Capital Real/Simulado", paper_bgcolor="#151a23", plot_bgcolor="#0e131b", font=dict(color="#d1d4dc"), height=300)
+            fig_j.add_trace(go.Scatter(x=df_eq["date"], y=df_eq["equity"], mode="lines+markers", line=dict(color="#0ecb81", width=2), name="Patrimonio ($)"))
+            fig_j.update_layout(title="📈 Curva de Crecimiento de Capital Real/Simulado (Equity Curve)", paper_bgcolor="#151a23", plot_bgcolor="#0e131b", font=dict(color="#d1d4dc"), height=300)
             st.plotly_chart(fig_j, use_container_width=True)
             
         st.subheader("📜 Diario Detallado de Operaciones Cerradas")
-        st.dataframe(pd.DataFrame(trades), use_container_width=True)
+        df_journal = []
+        for i, t in enumerate(trades):
+            is_win = t.get("pnl_usdt", 0) > 0
+            ep = t.get("entry_price", 0)
+            xp = t.get("exit_price", 0)
+            ep_str = f"${ep:,.8f}" if ep < 1.0 else f"${ep:,.4f}"
+            xp_str = f"${xp:,.8f}" if xp < 1.0 else f"${xp:,.4f}"
+            
+            df_journal.append({
+                "#": i + 1,
+                "Fecha / Hora": str(t.get("exit_time", ""))[:16].replace("T", " "),
+                "Criptomoneda": t.get("symbol", ""),
+                "Precio Entrada": ep_str,
+                "Precio Salida": xp_str,
+                "Motivo": f"🎯 {t.get('exit_reason')}" if is_win else f"🛑 {t.get('exit_reason')}",
+                "PnL ($)": f"{'+' if is_win else ''}${t.get('pnl_usdt', 0):.4f} USDT",
+                "Retorno (%)": f"{'+' if is_win else ''}{t.get('pnl_percent', 0):.2f}%",
+                "Estrategia": t.get("signal_reason", "")
+            })
+        st.dataframe(pd.DataFrame(df_journal), use_container_width=True)
 
 # =========================================================================
 # TAB 6: INSPECCIÓN DETALLADA DE GRÁFICO
