@@ -69,52 +69,61 @@ class MarketScanner:
                 # Puntuación global de confluencia (75% Técnico + 25% Sentimiento)
                 total_score = (tech_score * 0.75) + (sentiment_score * 0.25)
                 
-                # Construir explicaciones claras y humanas
+                # REGLA SPOT: Si la tendencia es fuertemente bajista y no hay patrón de reversión claro, descartar entrada
+                has_bullish_reversal_pattern = any(p["bias"] == "BULLISH" for p in patterns)
+                rsi = signals.get("rsi", 50)
+                
+                if signals.get("trend") in ["STRONG_BEARISH", "BEARISH"] and not (has_bullish_reversal_pattern or rsi <= 32):
+                    # Descartar: mercado cayendo sin señal de suelo
+                    continue
+                
+                # Construir explicaciones claras y humanas para compras SPOT
                 reasons_technical = []
                 reasons_fundamental = []
                 setup_type = "Sin patrón claro"
                 
-                # Análisis de tendencia
+                # 1. SETUP DE CONTINUACIÓN DE TENDENCIA ALCISTA (Trend Following)
                 if signals.get("trend") == "STRONG_BULLISH":
-                    reasons_technical.append("🟢 **Estructura Fuertemente Alcista**: Precio por encima de las 3 EMAs clave (20, 50 y 200).")
+                    reasons_technical.append("🟢 **Continuación de Tendencia**: Estructura fuertemente alcista (Precio > EMA 20 > EMA 50 > EMA 200).")
+                    setup_type = "Continuación de Tendencia Alcista (Impulso)"
                 elif signals.get("trend") == "BULLISH":
-                    reasons_technical.append("🟢 **Tendencia Alcista Activa**: El precio se mantiene sobre las medias rápidas.")
-                elif signals.get("trend") == "STRONG_BEARISH":
-                    reasons_technical.append("🔴 **Tendencia Bajista**: El precio está por debajo de todas las medias.")
+                    reasons_technical.append("🟢 **Tendencia Alcista Activa**: El precio se mantiene sólido sobre las medias rápidas.")
+                    setup_type = "Tendencia Alcista Saludable"
                     
-                # RSI
-                rsi = signals.get("rsi", 50)
+                # 2. SETUP DE REVERSIÓN DE TENDENCIA / REBOTE EN SOPORTE (Dip Buying)
                 if rsi <= 35:
-                    reasons_technical.append(f"🟢 **Sobreventa Favorable (RSI {rsi:.1f})**: Indica que la presión vendedora se está agotando (posible rebote).")
-                    setup_type = "Rebote en Zona de Sobreventa"
-                elif 45 <= rsi <= 60:
-                    reasons_technical.append(f"🟢 **RSI en Zona de Impulso Saludable ({rsi:.1f})**: Hay espacio para subir sin estar sobrecomprado.")
+                    reasons_technical.append(f"🎯 **Potencial Reversión Alcista por Sobreventa (RSI {rsi:.1f})**: Presión vendedora agotada en zona de descuento.")
+                    setup_type = "Reversión Alcista en Suelo / Rebote de Sobreventa"
+                elif 45 <= rsi <= 62:
+                    reasons_technical.append(f"🟢 **RSI en Zona de Impulso Óptimo ({rsi:.1f})**: Espacio para subir sin riesgo de sobrecompra.")
                 elif rsi >= 70:
-                    reasons_technical.append(f"⚠️ **Precaución por Sobrecompra (RSI {rsi:.1f})**: El precio ha subido mucho a corto plazo.")
+                    reasons_technical.append(f"⚠️ **RSI en Sobrecompra ({rsi:.1f})**: Cuidado con agotamiento a muy corto plazo.")
                     
-                # MACD
+                # MACD Momentum
                 if signals.get("macd_crossover") == "BULLISH_CROSS":
-                    reasons_technical.append("🟢 **Cruce Dorado de MACD**: Señal cuantitativa de inicio de impulso comprador.")
-                    setup_type = "Cruce de Momentum Alcista (MACD)"
+                    reasons_technical.append("⚡ **Cruce Dorado de MACD**: Activación de impulso comprador fresco.")
+                    if setup_type == "Sin patrón claro":
+                        setup_type = "Cruce de Momentum Alcista (MACD)"
                 elif signals.get("macd_hist", 0) > 0:
-                    reasons_technical.append("🟢 **Momentum Positivo**: Histograma de MACD en terreno positivo.")
+                    reasons_technical.append("🟢 **Momentum Positivo**: Compradores al mando en el histograma.")
                     
-                # Patrones de velas
+                # Patrones de velas de reversión alcista
                 if patterns:
                     for p in patterns:
-                        reasons_technical.append(f"🕯️ **Patrón de Vela Detectado**: {p['pattern']} ({p['description']})")
-                        setup_type = f"Patrón de Vela ({p['pattern']})"
-                        
+                        if p["bias"] == "BULLISH":
+                            reasons_technical.append(f"🕯️ **Giro Alcista (Acción de Precio)**: {p['pattern']} ({p['description']})")
+                            setup_type = f"Reversión Confirmada por Vela ({p['pattern']})"
+                            
                 # Volumen
                 if signals.get("volume_spike"):
-                    reasons_technical.append("⚡ **Pico de Volumen Anómalo**: Fuerte participación de capital en las últimas velas.")
+                    reasons_technical.append("🔥 **Inyección de Volumen**: Fuerte entrada de capital institucional en velas recientes.")
                     
                 # Razones Fundamentales / Macro
                 reasons_fundamental.append(f"📊 **Sentimiento Global**: Fear & Greed en {fng_info['score']}/100 ({fng_info['sentiment']}).")
                 if market_sentiment["overall_sentiment"] == "BULLISH":
-                    reasons_fundamental.append("📰 **Flujo de Noticias Positivo**: Predominan titulares favorables para el mercado cripto.")
+                    reasons_fundamental.append("📰 **Viento a Favor en Noticias**: Flujo informativo positivo para el mercado cripto.")
                 elif market_sentiment["overall_sentiment"] == "BEARISH":
-                    reasons_fundamental.append("⚠️ **Noticias Cautas**: Hay noticias negativas recientes en los medios.")
+                    reasons_fundamental.append("⚠️ **Ambiente Cauto en Medios**: Operar con Stop-Loss ajustado por volatilidad de noticias.")
                     
                 # Calcular propuesta de Stop Loss y Take Profit
                 trade_params = self.risk_manager.calculate_trade_parameters(
@@ -126,15 +135,15 @@ class MarketScanner:
                 )
                 
                 # Calificación de Calidad de la Oportunidad (Alta, Media, Baja)
-                if total_score >= 0.40:
+                if total_score >= 0.35:
                     conviction = "ALTA CONVICCIÓN 🔥"
-                    recommendation = "OPORTUNIDAD DE COMPRA CLARA"
+                    recommendation = "COMPRA EN SPOT (ALTA PROBABILIDAD)"
                 elif total_score >= min_score_threshold:
                     conviction = "MODERADA ⚡"
-                    recommendation = "OPORTUNIDAD DE COMPRA MODERADA"
+                    recommendation = "COMPRA EN SPOT (MODERADA)"
                 else:
                     conviction = "NEUTRAL / BAJA ⏳"
-                    recommendation = "MANTENERSE AL MARGEN (HOLD)"
+                    recommendation = "MANTENERSE EN LIQUIDEZ (USDT)"
                     
                 opportunity_card = {
                     "symbol": sym,
