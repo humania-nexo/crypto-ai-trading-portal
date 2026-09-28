@@ -84,7 +84,7 @@ class MarketScanner:
             total_score = (tech_score * 0.75) + (sentiment_score * 0.25)
             
             # REGLA SPOT: Si la tendencia es fuertemente bajista y no hay sobreventa ni patrón de suelo, descartar
-            has_bullish_reversal_pattern = any(p["bias"] == "BULLISH" for p in patterns)
+            has_bullish_reversal_pattern = any(p.get("bias") == "BULLISH" or "ALCISTA" in p.get("type", "") for p in patterns)
             rsi = signals.get("rsi", 50)
             
             if signals.get("trend") in ["STRONG_BEARISH", "BEARISH"] and not (has_bullish_reversal_pattern or rsi <= 35):
@@ -121,12 +121,12 @@ class MarketScanner:
                 reasons_technical.append("🟢 **Momentum Positivo**: Compradores al mando en el histograma.")
                 
             # Patrones de velas
-            if patterns:
-                for p in patterns:
-                    if p["bias"] == "BULLISH":
-                        reasons_technical.append(f"🕯️ **Giro Alcista (Vela)**: {p['pattern']} ({p['description']})")
-                        if setup_type == "Sin patrón claro":
-                            setup_type = f"Vela Alcista ({p['pattern']})"
+            candlestick_list = analysis.get("candlestick_patterns", [])
+            for p in candlestick_list:
+                if p.get("bias") == "BULLISH":
+                    reasons_technical.append(f"🕯️ **Giro Alcista (Vela)**: {p.get('pattern', '')} ({p.get('description', '')})")
+                    if setup_type == "Sin patrón claro":
+                        setup_type = f"Vela Alcista ({p.get('pattern', '')})"
                             
             # Formaciones Chartistas Estructurales (Doble Suelo, HCH Invertido, Banderines)
             chart_forms = analysis.get("chart_formations", [])

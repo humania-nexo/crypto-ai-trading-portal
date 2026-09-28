@@ -14,22 +14,6 @@ from datetime import datetime, timedelta
 from typing import Dict, Set
 from dotenv import load_dotenv
 
-# Servidor HTTP ligero para que Render reconozca el servicio web gratuito activo
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Crypto AI Watcher Daemon is Running 24/7 OK")
-        
-    def log_message(self, format, *args):
-        pass # Silenciar logs HTTP
-
-def run_health_server():
-    port = int(os.getenv("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    server.serve_forever()
-
 from src.analysis.technical_agent import TechnicalAgent
 from src.news.sentiment_agent import SentimentAgent
 from src.risk.risk_manager import RiskManager
@@ -46,12 +30,23 @@ logger = logging.getLogger("WatcherDaemon")
 
 load_dotenv()
 
+# Servidor HTTP ligero para que Render reconozca el servicio web activo
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"OK - Crypto AI Watcher Daemon Running 24/7")
+        
+    def log_message(self, format, *args):
+        pass # Silenciar logs de health check
+
 class MarketWatcherDaemon:
     def __init__(
         self,
         timeframe: str = "5m",
         scan_interval_seconds: int = 180, # Cada 3 minutos
-        min_score_threshold: float = 0.35, # Solo ALTA CONVICCIÓN
+        min_score_threshold: float = 0.30, # Umbral equilibrado de convicción
         alert_cooldown_minutes: int = 45   # Evitar repetir alerta del mismo par en 45 min
     ):
         self.timeframe = timeframe
@@ -93,7 +88,6 @@ class MarketWatcherDaemon:
         rr = opp["risk_reward_ratio"]
         setup = opp["setup_type"]
         
-        # Formato de precios adaptativo para monedas micro como SHIB
         p_str = f"${price:,.8f}" if price < 1.0 else f"${price:,.4f}"
         sl_str = f"${sl:,.8f}" if sl < 1.0 else f"${sl:,.4f}"
         tp_str = f"${tp:,.8f}" if tp < 1.0 else f"${tp:,.4f}"
@@ -134,7 +128,7 @@ class MarketWatcherDaemon:
                 min_score_threshold=self.min_score_threshold
             )
             top_opps = results.get("top_opportunities", [])
-            logger.info(f"✨ Escaneo finalizado. Se encontraron {len(top_opps)} oportunidades de alta convicción.")
+            logger.info(f"✨ Escaneo finalizado. Se encontraron {len(top_opps)} oportunidades.")
             
             for opp in top_opps:
                 sym = opp["symbol"]
@@ -146,31 +140,32 @@ class MarketWatcherDaemon:
         except Exception as e:
             logger.error(f"❌ Error durante el ciclo de escaneo: {e}")
 
-    def start_loop(self):
-        """Inicia el bucle continuo 24/7."""
+    def loop(self):
+        """Bucle continuo de escaneo cada N segundos."""
         logger.info("=" * 60)
-        logger.info("🤖 INICIANDO VIGILANTE AUTÓNOMO DE MERCADO 24/7")
+        logger.info("🤖 VIGILANTE AUTÓNOMO INICIADO Y EN MONITOREO CONTINUO")
         logger.info(f"⏱️ Intervalo de escaneo: cada {self.scan_interval // 60} minutos")
-        logger.info(f"📲 Alertas Telegram: {'CONFIGURADO ✅' if self.notifier.is_configured else 'SIN CONFIGURAR ⚠️'}")
         logger.info("=" * 60)
         
-        if self.notifier.is_configured:
-            self.notifier.send_message("🤖 <b>¡Vigilante Autónomo 24/7 Iniciado en la Nube!</b>\nEscaneando continuamente los pares de Binance para enviarte oportunidades de alta probabilidad a tu celular.")
-            
         while True:
             self.run_single_scan()
             logger.info(f"💤 Esperando {self.scan_interval} segundos para el próximo ciclo...")
             time.sleep(self.scan_interval)
 
 if __name__ == "__main__":
-    # Iniciar servidor health check en segundo plano para Render
-    t = threading.Thread(target=run_health_server, daemon=True)
-    t.start()
-    
     watcher = MarketWatcherDaemon(
         timeframe="5m",
         scan_interval_seconds=180, # Escaneo cada 3 minutos
-        min_score_threshold=0.35,  # Solo oportunidades de alta calidad
+        min_score_threshold=0.30,  # Oportunidades claras
         alert_cooldown_minutes=45  # Cooldown de 45 min por par
     )
-    watcher.start_loop()
+    
+    # Iniciar escáner en segundo plano
+    scanner_thread = threading.Thread(target=watcher.loop, daemon=True)
+    scanner_thread.start()
+    
+    # Mantener servidor web activo en el hilo principal para responder a Render
+    port = int(os.environ.get("PORT", 10000))
+    logger.info(f"🌐 Servidor Web de Render escuchando en el puerto {port}")
+    httpd = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    httpd.serve_forever()
