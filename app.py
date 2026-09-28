@@ -286,6 +286,34 @@ with tab_radar:
                 p3.metric("🎯 Take Profit Objetivo", f"${opp['take_profit']:,.6f}", f"+{opp['tp_percent']}%")
                 p4.metric("⚖️ Ratio Beneficio / Riesgo", f"1 : {opp['risk_reward_ratio']}")
                 
+                # Roadmap de Trailing Stop y Break-Even
+                target_gain = opp['take_profit'] - opp['price']
+                be_trig = opp['price'] + (target_gain * 0.50)
+                be_sl = opp['price'] * 1.001
+                ts_trig = opp['price'] + (target_gain * 0.75)
+                ts_sl = opp['price'] + (target_gain * 0.40)
+                
+                def fmt_price(val):
+                    return f"${val:,.8f}" if val < 1.0 else f"${val:,.4f}"
+                
+                st.markdown(f"""
+                <div style="background-color: #1a2234; border: 1px dashed #38bdf8; border-radius: 8px; padding: 12px 16px; margin: 12px 0;">
+                    <div style="font-weight: bold; color: #38bdf8; margin-bottom: 6px;">🛣️ Ruta de Escalado y Trailing Stop Automático:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                        <div>
+                            <b>1️⃣ Nivel 1 (Break-Even / Riesgo Cero):</b><br>
+                            • Si el precio sube a: <code style="color:#f0b90b;">{fmt_price(be_trig)}</code> (50% del camino)<br>
+                            • Stop Loss se mueve a: <code style="color:#0ecb81;">{fmt_price(be_sl)}</code> (Capital Blindado + Comisión)
+                        </div>
+                        <div>
+                            <b>2️⃣ Nivel 2 (Trailing Stop +40% Lock):</b><br>
+                            • Si el precio sube a: <code style="color:#38bdf8;">{fmt_price(ts_trig)}</code> (75% del camino)<br>
+                            • Stop Loss se sube a: <code style="color:#0ecb81;">{fmt_price(ts_sl)}</code> (Asegura +40% de Ganancia)
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
                 # Botones de Operación
                 b_col1, b_col2 = st.columns([1, 2])
                 with b_col1:
@@ -392,11 +420,51 @@ with tab_bot:
         st.caption("No hay posiciones abiertas en este momento.")
     else:
         for sym, p_info in active_bot_pos.items():
-            col_p1, col_p2, col_p3, col_p4 = st.columns(4)
-            col_p1.metric(f"🪙 {sym}", f"${p_info['entry_price']:,.6f}", "Precio Entrada")
-            col_p2.metric("🛑 Stop Loss Actual", f"${p_info['stop_loss']:,.6f}", "Protegido" if p_info['stop_loss'] >= p_info['entry_price'] else "Inicial")
-            col_p3.metric("🎯 Take Profit", f"${p_info['take_profit']:,.6f}")
-            col_p4.metric("💰 Inversión", f"${(p_info['quantity'] * p_info['entry_price']):,.2f} USDT")
+            entry_p = p_info['entry_price']
+            sl_p = p_info['stop_loss']
+            tp_p = p_info['take_profit']
+            target_gain = tp_p - entry_p
+
+            be_trig = entry_p + (target_gain * 0.50)
+            be_sl = entry_p * 1.001
+            ts_trig = entry_p + (target_gain * 0.75)
+            ts_sl = entry_p + (target_gain * 0.40)
+            
+            def fmt_p(val):
+                return f"${val:,.8f}" if val < 1.0 else f"${val:,.4f}"
+
+            # Determinar fase actual
+            if sl_p >= (ts_sl - 1e-8):
+                stage_title = "🚀 FASE 2: TRAILING STOP (+40% DE GANANCIA ASEGURADA)"
+                stage_color = "#0ecb81"
+                stage_bg = "rgba(14, 203, 129, 0.15)"
+            elif sl_p >= entry_p:
+                stage_title = "🛡️ FASE 1: BREAK-EVEN (RIESGO CERO / CAPITAL BLINDADO)"
+                stage_color = "#38bdf8"
+                stage_bg = "rgba(56, 189, 248, 0.15)"
+            else:
+                stage_title = "⏳ FASE 0: RIESGO INICIAL (ESPERANDO GATILLO DEL 50%)"
+                stage_color = "#f0b90b"
+                stage_bg = "rgba(240, 185, 11, 0.15)"
+
+            st.markdown(f"""
+            <div style="background-color: #151a23; border: 1px solid #2a364f; border-left: 6px solid {stage_color}; border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <span style="font-size: 20px; font-weight: bold; color: white;">🪙 {sym}</span>
+                    <span style="background: {stage_bg}; color: {stage_color}; border: 1px solid {stage_color}; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 12px;">{stage_title}</span>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 13px; margin-bottom: 12px;">
+                    <div><b>📥 Entrada:</b> <br><code>{fmt_p(entry_p)}</code></div>
+                    <div><b>🛑 Stop Loss Actual:</b> <br><code style="color: {'#0ecb81' if sl_p >= entry_p else '#f6465d'};">{fmt_p(sl_p)}</code></div>
+                    <div><b>🎯 Take Profit:</b> <br><code style="color: #0ecb81;">{fmt_p(tp_p)}</code></div>
+                    <div><b>💰 Inversión:</b> <br>${(p_info['quantity'] * entry_p):,.2f} USDT</div>
+                </div>
+                <div style="background: #0d1117; border: 1px dashed #242c3d; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #94a3b8; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div><b>📍 Hito 1 (Break-Even 50%):</b> Gatillo: <code style="color: #f0b90b;">{fmt_p(be_trig)}</code> ➔ Nuevo SL: <code style="color: #0ecb81;">{fmt_p(be_sl)}</code></div>
+                    <div><b>📍 Hito 2 (Trailing 75%):</b> Gatillo: <code style="color: #38bdf8;">{fmt_p(ts_trig)}</code> ➔ Nuevo SL: <code style="color: #0ecb81;">{fmt_p(ts_sl)}</code></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # =========================================================================
 # TAB 3: BACKTESTING / MÁQUINA DEL TIEMPO
@@ -648,6 +716,31 @@ with tab_chart:
         fig.add_trace(go.Scatter(x=df_chart['datetime'], y=df_chart['ema_50'], line=dict(color='#0ecb81', width=1.5), name='EMA 50'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df_chart['datetime'], y=df_chart['ema_200'], line=dict(color='#8b5cf6', width=2), name='EMA 200'), row=1, col=1)
         
+        # Comprobar si hay una posición activa en este par
+        pos_data = broker.open_positions.get(inspect_pair)
+        if pos_data:
+            ep = pos_data["entry_price"]
+            sl = pos_data["stop_loss"]
+            tp = pos_data["take_profit"]
+            tg = tp - ep
+            be_trig = ep + (tg * 0.50)
+            ts_trig = ep + (tg * 0.75)
+            
+            p_format = (lambda v: f"${v:,.8f}" if v < 1.0 else f"${v:,.4f}")
+            
+            fig.add_hline(y=ep, line_dash="solid", line_color="#38bdf8", line_width=2,
+                          annotation_text=f"📥 Entrada: {p_format(ep)}", annotation_position="top right", row=1, col=1)
+            fig.add_hline(y=sl, line_dash="solid", line_color="#f6465d", line_width=2,
+                          annotation_text=f"🛑 SL Actual: {p_format(sl)}", annotation_position="bottom right", row=1, col=1)
+            fig.add_hline(y=be_trig, line_dash="dash", line_color="#f0b90b", line_width=1.5,
+                          annotation_text=f"📍 Gatillo Break-Even (50%): {p_format(be_trig)}", annotation_position="top left", row=1, col=1)
+            fig.add_hline(y=ts_trig, line_dash="dash", line_color="#0ecb81", line_width=1.5,
+                          annotation_text=f"📍 Gatillo Trailing Stop (75%): {p_format(ts_trig)}", annotation_position="top left", row=1, col=1)
+            fig.add_hline(y=tp, line_dash="solid", line_color="#0ecb81", line_width=2,
+                          annotation_text=f"🎯 TP Objetivo (100%): {p_format(tp)}", annotation_position="top right", row=1, col=1)
+            
+            st.info(f"🛡️ **Posición Activa Detectada en {inspect_pair}:** Mostrando líneas de Entrada, Stop Loss actual, Gatillos de Break-Even (50%) y Trailing Stop (75%).")
+        
         # RSI
         fig.add_trace(go.Scatter(x=df_chart['datetime'], y=df_chart['rsi'], line=dict(color='#38bdf8', width=1.5), name='RSI (14)'), row=2, col=1)
         fig.add_hline(y=70, line_dash="dash", line_color="#f87171", line_width=1, row=2, col=1)
@@ -659,10 +752,47 @@ with tab_chart:
         fig.add_trace(go.Bar(x=df_chart['datetime'], y=df_chart['macd_hist'], marker_color=['#0ecb81' if v >= 0 else '#f6465d' for v in df_chart['macd_hist']], name='Hist'), row=3, col=1)
         
         fig.update_layout(
-            height=600, margin=dict(l=10, r=10, t=10, b=10),
+            height=650, margin=dict(l=10, r=10, t=10, b=10),
             xaxis_rangeslider_visible=False, paper_bgcolor="#151a23", plot_bgcolor="#0e131b", font={'color': "#d1d4dc"}
         )
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Simulador de niveles personalizados
+        with st.expander("📐 Calculadora Visual de Hitos de Trailing Stop"):
+            st.caption("Introduce cualquier precio de compra para calcular exactamente en qué números se activará el Break-Even y el Trailing Stop:")
+            latest_c = df_chart['close'].iloc[-1]
+            c_calc1, c_calc2, c_calc3 = st.columns(3)
+            with c_calc1:
+                custom_entry = st.number_input("Precio de Entrada ($)", value=float(latest_c), format="%.8f" if latest_c < 1.0 else "%.4f", key="c_entry")
+            with c_calc2:
+                custom_sl = st.number_input("Stop Loss Inicial ($)", value=float(latest_c * 0.97), format="%.8f" if latest_c < 1.0 else "%.4f", key="c_sl")
+            with c_calc3:
+                custom_tp = st.number_input("Take Profit Objetivo ($)", value=float(latest_c * 1.04), format="%.8f" if latest_c < 1.0 else "%.4f", key="c_tp")
+                
+            c_tg = custom_tp - custom_entry
+            c_be_trig = custom_entry + (c_tg * 0.50)
+            c_be_sl = custom_entry * 1.001
+            c_ts_trig = custom_entry + (c_tg * 0.75)
+            c_ts_sl = custom_entry + (c_tg * 0.40)
+            
+            p_fmt = (lambda v: f"${v:,.8f}" if v < 1.0 else f"${v:,.4f}")
+            st.markdown(f"""
+            <div style="background: #101520; border: 1px solid #2a364f; border-radius: 8px; padding: 12px 16px; margin-top: 10px;">
+                <div style="font-weight: bold; color: #38bdf8; margin-bottom: 8px;">📊 Escalado de tu Posición:</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 13px;">
+                    <div>
+                        <b>🟡 1. Activación de Break-Even (50%):</b><br>
+                        • Cuando el precio alcance: <code style="color: #f0b90b;">{p_fmt(c_be_trig)}</code><br>
+                        • Tu Stop Loss se sube a: <code style="color: #0ecb81;">{p_fmt(c_be_sl)}</code> (Riesgo Cero)
+                    </div>
+                    <div>
+                        <b>🟢 2. Activación de Trailing Stop (75%):</b><br>
+                        • Cuando el precio alcance: <code style="color: #38bdf8;">{p_fmt(c_ts_trig)}</code><br>
+                        • Tu Stop Loss se sube a: <code style="color: #0ecb81;">{p_fmt(c_ts_sl)}</code> (Asegura +40% de Ganancia)
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # =========================================================================
 # TAB 7: NOTICIAS & SENTIMIENTO GLOBAL

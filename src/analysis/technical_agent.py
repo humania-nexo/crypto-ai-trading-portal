@@ -144,16 +144,22 @@ class TechnicalAgent:
         elif score <= -0.15:
             bias = "BEARISH"
             
+        all_patterns = candlestick_patterns + chart_formations
+        
         return {
             "symbol": symbol,
             "timeframe": timeframe,
             "status": "success",
+            "price": float(df['close'].iloc[-1]),
+            "current_price": float(df['close'].iloc[-1]),
+            "technical_score": round(score, 2),
             "score": round(score, 2),
             "bias": bias,
-            "current_price": float(df['close'].iloc[-1]),
             "signals": signals,
+            "patterns": all_patterns,
             "candlestick_patterns": candlestick_patterns,
             "chart_formations": chart_formations,
+            "levels": levels,
             "supports_resistances": levels,
             "df": df_indicators
         }

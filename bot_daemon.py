@@ -94,14 +94,30 @@ class MarketWatcherDaemon:
         
         tech_reasons = "\n".join([f"• {r}" for r in opp.get("technical_reasons", [])[:2]])
         
+        # Calcular hitos de Trailing Stop
+        target_gain = tp - price
+        be_trig = price + (target_gain * 0.50)
+        be_sl = price * 1.001
+        ts_trig = price + (target_gain * 0.75)
+        ts_sl = price + (target_gain * 0.40)
+        
+        be_trig_str = f"${be_trig:,.8f}" if be_trig < 1.0 else f"${be_trig:,.4f}"
+        be_sl_str = f"${be_sl:,.8f}" if be_sl < 1.0 else f"${be_sl:,.4f}"
+        ts_trig_str = f"${ts_trig:,.8f}" if ts_trig < 1.0 else f"${ts_trig:,.4f}"
+        ts_sl_str = f"${ts_sl:,.8f}" if ts_sl < 1.0 else f"${ts_sl:,.4f}"
+        
         msg = (
             f"🔥 <b>¡NUEVA OPORTUNIDAD EN {sym}!</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"📌 <b>Patrón:</b> {setup}\n"
             f"💵 <b>Precio Actual:</b> <code>{p_str}</code>\n\n"
             f"🎯 <b>Take Profit (Objetivo):</b> <code>{tp_str}</code> (+{tp_pct}%)\n"
-            f"🛑 <b>Stop Loss (Protección):</b> <code>{sl_str}</code> (-{sl_pct}%)\n"
+            f"🛑 <b>Stop Loss (Inicial):</b> <code>{sl_str}</code> (-{sl_pct}%)\n"
             f"⚖️ <b>Ratio Riesgo/Beneficio:</b> 1 : {rr}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ <b>Hitos de Trailing Stop y Protección:</b>\n"
+            f"• <b>Break-Even (Riesgo 0):</b> Al llegar a <code>{be_trig_str}</code> ➔ Subir SL a <code>{be_sl_str}</code>\n"
+            f"• <b>Trailing (+40% Lock):</b> Al llegar a <code>{ts_trig_str}</code> ➔ Subir SL a <code>{ts_sl_str}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"📊 <b>Análisis Técnico:</b>\n{tech_reasons}\n\n"
             f"📱 <b>Cómo ejecutar en tu app de Binance:</b>\n"
