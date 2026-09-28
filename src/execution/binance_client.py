@@ -232,6 +232,47 @@ class BinanceLiveClient:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+    def update_live_oco_order(
+        self,
+        symbol: str,
+        quantity: float,
+        new_stop_loss: float,
+        take_profit: float
+    ) -> Dict[str, Any]:
+        """Cancela la orden OCO anterior en Binance y coloca una nueva con el Stop Loss más alto (Trailing / Break-Even)."""
+        if not self.client:
+            return {"status": "error", "message": "No conectado a Binance"}
+            
+        try:
+            # 1. Cancelar órdenes abiertas previas de este par
+            open_orders = self.client.fetch_open_orders(symbol=symbol)
+            for o in open_orders:
+                try:
+                    self.client.cancel_order(o["id"], symbol=symbol)
+                except Exception:
+                    pass
+                    
+            # 2. Formatear y colocar nueva orden OCO protegida
+            formatted_qty = self.client.amount_to_precision(symbol, quantity)
+            formatted_tp = self.client.price_to_precision(symbol, take_profit)
+            formatted_sl_trigger = self.client.price_to_precision(symbol, new_stop_loss)
+            formatted_sl_limit = self.client.price_to_precision(symbol, new_stop_loss * 0.998)
+            
+            raw_symbol = symbol.replace('/', '')
+            oco_res = self.client.privatePostOrderOco({
+                'symbol': raw_symbol,
+                'side': 'SELL',
+                'quantity': formatted_qty,
+                'price': formatted_tp,
+                'stopPrice': formatted_sl_trigger,
+                'stopLimitPrice': formatted_sl_limit,
+                'stopLimitTimeInForce': 'GTC'
+            })
+            return {"status": "success", "orderListId": oco_res.get("orderListId")}
+        except Exception as e:
+            logger.error(f"Error actualizando OCO en Binance para {symbol}: {e}")
+            return {"status": "error", "message": str(e)}
+
     def sync_trades_from_binance(self, symbols: List[str] = None, limit: int = 15) -> List[Dict[str, Any]]:
         """Descarga compras y ventas recientes de Binance."""
         if not self.client:

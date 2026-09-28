@@ -34,11 +34,12 @@ class AutoTrader:
         # Trailing stop state tracking
         self.peak_prices: Dict[str, float] = {}
 
-    def update_trailing_stops(self, current_prices: Dict[str, float]) -> List[str]:
+    def update_trailing_stops(self, current_prices: Dict[str, float], is_live_trading: bool = False) -> List[str]:
         """
         Gestiona el Trailing Stop Dinámico:
         - Si el trade va ganando más del 50% del camino al Take Profit, mueve el Stop Loss al precio de entrada (Break-Even = Riesgo Cero).
         - Si sigue subiendo, protege las ganancias subiendo el Stop Loss detrás del precio.
+        - En modo Real Binance: Cancela automáticamente la orden OCO vieja y coloca la nueva con el Stop Loss superior.
         """
         updated_symbols = []
         for symbol, pos in self.broker.open_positions.items():
@@ -59,17 +60,32 @@ class AutoTrader:
             target_gain = tp_p - entry_p
             current_gain = current_p - entry_p
             
+            new_sl = None
+            update_label = ""
+            
             # 1. MOVER A BREAK-EVEN (Riesgo Cero) si alcanza el 50% del objetivo
             if current_gain >= (target_gain * 0.50) and sl_p < entry_p:
-                pos["stop_loss"] = round(entry_p * 1.001, 6) # Entrada + comisión
-                updated_symbols.append(f"{symbol} (Protegido en Break-Even / Riesgo Cero)")
-                self.broker.save_state()
+                new_sl = round(entry_p * 1.001, 8) # Entrada + comisión
+                update_label = f"{symbol} (Protegido en Break-Even / Riesgo Cero)"
                 
             # 2. TRAILING STOP: Si supera el 75% del objetivo, asegurar al menos 40% de ganancia
             elif current_gain >= (target_gain * 0.75) and sl_p < (entry_p + target_gain * 0.40):
-                pos["stop_loss"] = round(entry_p + (target_gain * 0.40), 6)
-                updated_symbols.append(f"{symbol} (Trailing Stop Asegurando +40% de Ganancia)")
+                new_sl = round(entry_p + (target_gain * 0.40), 8)
+                update_label = f"{symbol} (Trailing Stop Asegurando +40% de Ganancia)"
+                
+            if new_sl and new_sl > sl_p:
+                pos["stop_loss"] = new_sl
                 self.broker.save_state()
+                updated_symbols.append(update_label)
+                
+                # Si estamos operando con dinero real en Binance, reemplazar la OCO en Binance
+                if is_live_trading and self.binance_live.is_connected:
+                    self.binance_live.update_live_oco_order(
+                        symbol=symbol,
+                        quantity=pos["quantity"],
+                        new_stop_loss=new_sl,
+                        take_profit=tp_p
+                    )
                 
         return updated_symbols
 
@@ -97,7 +113,7 @@ class AutoTrader:
                 current_prices[sym] = float(t_data.iloc[-1]["close"])
                 
         # 2. Gestionar Trailing Stop
-        trailing_updates = self.update_trailing_stops(current_prices)
+        trailing_updates = self.update_trailing_stops(current_prices, is_live_trading=is_live_trading)
         if trailing_updates:
             log_messages.extend([f"🛡️ Trailing Stop: {u}" for u in trailing_updates])
             
