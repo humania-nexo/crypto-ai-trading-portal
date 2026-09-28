@@ -333,7 +333,6 @@ with tab_radar:
                                         take_profit=opp["take_profit"],
                                         reason=f"Real Binance: {opp['setup_type']}"
                                     )
-                                    notifier.alert_new_opportunity(opp)
                                     time.sleep(1)
                                     st.rerun()
                                 else:
