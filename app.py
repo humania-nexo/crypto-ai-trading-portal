@@ -521,16 +521,25 @@ with tab_portfolio:
         st.markdown("### 🪙 Criptomonedas en Posesión")
         if not active_crypto_assets:
             st.info("No se detectaron balances de criptomonedas distintos a USDT.")
-        else:
             asset_rows = []
             for a in active_crypto_assets:
+                free_amt = float(a.get("free_amount", a.get("free", 0.0)))
+                locked_amt = float(a.get("locked_in_orders", a.get("locked", 0.0)))
+                total_amt = float(a.get("total_amount", a.get("total", 0.0)))
+                u_price = float(a.get("unit_price_usdt", a.get("current_price", 0.0)))
+                val_usd = float(a.get("value_usdt", 0.0))
+                pct = a.get("percentage", 0.0)
+                
+                u_price_str = f"${u_price:,.8f}" if u_price < 1.0 else f"${u_price:,.4f}"
+                
                 asset_rows.append({
-                    "Criptomoneda": a["asset"],
-                    "Cantidad Libre": f"{a['free']:,.6f}",
-                    "Cantidad Bloqueada (en Órdenes)": f"{a['locked']:,.6f}",
-                    "Cantidad Total": f"{a['total']:,.6f}",
-                    "Precio Actual": f"${a['current_price']:,.6f}",
-                    "Valor Estimado en USD": f"${a['value_usdt']:,.2f} USDT"
+                    "Criptomoneda": a.get("asset", ""),
+                    "Cantidad Libre": f"{free_amt:,.6f}",
+                    "Cantidad Bloqueada (en Órdenes)": f"{locked_amt:,.6f}",
+                    "Cantidad Total": f"{total_amt:,.6f}",
+                    "Precio Unitario": u_price_str,
+                    "Valor Estimado (USD)": f"${val_usd:,.2f} USDT",
+                    "% del Portafolio": f"{pct}%"
                 })
             st.dataframe(pd.DataFrame(asset_rows), use_container_width=True)
             
