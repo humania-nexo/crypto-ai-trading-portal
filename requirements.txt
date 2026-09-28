@@ -1,8 +1,6 @@
-# Dependencias principales para el sistema de trading algorítmico y análisis cripto
 ccxt>=4.2.0
 pandas>=2.1.0
 numpy>=1.26.0
-pandas-ta>=0.3.14b0
 requests>=2.31.0
 feedparser>=6.0.10
 python-dotenv>=1.0.0
