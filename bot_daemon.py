@@ -8,9 +8,27 @@ Scans Binance Spot pairs and dispatches high-conviction scalping alerts directly
 import os
 import time
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime, timedelta
 from typing import Dict, Set
 from dotenv import load_dotenv
+
+# Servidor HTTP ligero para que Render reconozca el servicio web gratuito activo
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"Crypto AI Watcher Daemon is Running 24/7 OK")
+        
+    def log_message(self, format, *args):
+        pass # Silenciar logs HTTP
+
+def run_health_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
 
 from src.analysis.technical_agent import TechnicalAgent
 from src.news.sentiment_agent import SentimentAgent
@@ -145,6 +163,10 @@ class MarketWatcherDaemon:
             time.sleep(self.scan_interval)
 
 if __name__ == "__main__":
+    # Iniciar servidor health check en segundo plano para Render
+    t = threading.Thread(target=run_health_server, daemon=True)
+    t.start()
+    
     watcher = MarketWatcherDaemon(
         timeframe="5m",
         scan_interval_seconds=180, # Escaneo cada 3 minutos
