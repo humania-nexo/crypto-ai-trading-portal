@@ -269,3 +269,37 @@ class PaperBroker:
             "open_positions": positions_summary,
             "trade_history": self.trade_history
         }
+
+    def get_performance_analytics(self) -> Dict[str, Any]:
+        """Calcula métricas detalladas de desempeño histórico (Win Rate, PnL, Profit Factor, Best/Worst Trade)."""
+        total_trades = len(self.trade_history)
+        winning_trades = [t for t in self.trade_history if t.get("pnl_usdt", 0) > 0]
+        losing_trades = [t for t in self.trade_history if t.get("pnl_usdt", 0) <= 0]
+        
+        win_count = len(winning_trades)
+        loss_count = len(losing_trades)
+        win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0.0
+        
+        total_pnl = sum([t.get("pnl_usdt", 0) for t in self.trade_history])
+        net_roi_pct = (total_pnl / self.initial_balance * 100) if self.initial_balance > 0 else 0.0
+        
+        gross_profit = sum([t.get("pnl_usdt", 0) for t in winning_trades])
+        gross_loss = abs(sum([t.get("pnl_usdt", 0) for t in losing_trades]))
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 1.0)
+        
+        pnls = [t.get("pnl_usdt", 0) for t in self.trade_history]
+        best_trade = max(pnls) if pnls else 0.0
+        worst_trade = min(pnls) if pnls else 0.0
+        
+        return {
+            "total_trades": total_trades,
+            "winning_trades": win_count,
+            "losing_trades": loss_count,
+            "win_rate_pct": round(win_rate, 1),
+            "total_pnl_usdt": round(total_pnl, 2),
+            "net_roi_pct": round(net_roi_pct, 2),
+            "profit_factor": round(profit_factor, 2),
+            "best_trade_usdt": round(best_trade, 2),
+            "worst_trade_usdt": round(worst_trade, 2)
+        }
+
