@@ -76,7 +76,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Inicializar agentes, notificador y clientes
-@st.cache_resource
 def get_agents():
     tech = TechnicalAgent(exchange_id="binance")
     sentiment = SentimentAgent(cryptopanic_api_key=os.getenv("CRYPTOPANIC_API_KEY"))
@@ -133,7 +132,6 @@ with st.sidebar:
             set_key(".env", "BINANCE_API_KEY", api_k)
             set_key(".env", "BINANCE_API_SECRET", api_s)
             st.success("¡Claves guardadas! Recargando...")
-            st.cache_resource.clear()
             st.rerun()
             
         if binance_live.is_connected:
@@ -152,7 +150,6 @@ with st.sidebar:
                 set_key(".env", "TELEGRAM_BOT_TOKEN", tg_token)
                 set_key(".env", "TELEGRAM_CHAT_ID", tg_chat)
                 st.success("Configuración guardada.")
-                st.cache_resource.clear()
                 st.rerun()
         with col_tg2:
             if st.button("🔔 Probar Alerta", use_container_width=True):
