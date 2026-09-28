@@ -355,18 +355,20 @@ with tab_bot:
     with col_bcfg3:
         bot_max_pos = st.number_input("Máximo de Posiciones Simultáneas", min_value=1, max_value=10, value=3, step=1)
         
-    col_run_bot, col_status_bot = st.columns([1, 2])
+    col_run_bot, col_refresh_bot, col_status_bot = st.columns([1, 1, 2])
     with col_run_bot:
-        run_cycle = st.button("▶️ EJECUTAR CICLO AUTÓNOMO AHORA", use_container_width=True, type="primary")
+        run_cycle = st.button("▶️ EJECUTAR CICLO AHORA", use_container_width=True, type="primary")
+    with col_refresh_bot:
+        auto_loop = st.toggle("🔄 Auto-Monitoreo en Vivo (cada 30s)", value=False, help="Ejecuta ciclos de supervisión automáticos cada 30 segundos mientras la pestaña esté abierta.")
         
     with col_status_bot:
-        st.markdown(f"**Estado del Bot:** `🛡️ Trailing Stop Activo` | **Convicción Mínima Requerida:** `ALTA (Score >= 0.35)`")
+        st.markdown(f"**Estado del Bot:** `🛡️ Trailing Stop Activo` | **Convicción Mínima:** `ALTA (Score >= 0.35)`")
         
     if "bot_logs" not in st.session_state:
         st.session_state.bot_logs = []
         
-    if run_cycle:
-        with st.spinner("🤖 El Bot está inspeccionando posiciones abiertas, gestionando Trailing Stops y escaneando nuevas entradas..."):
+    if run_cycle or auto_loop:
+        with st.spinner("🤖 Inspeccionando posiciones abiertas y gestionando Trailing Stops en vivo..."):
             cycle_result = auto_trader.run_pilot_cycle(
                 symbols=selected_pairs_to_scan,
                 timeframe=tf_clean,
@@ -377,6 +379,10 @@ with tab_bot:
             for log in cycle_result["logs"]:
                 st.session_state.bot_logs.insert(0, f"[{cycle_result['timestamp']}] {log}")
             st.success(f"✅ Ciclo completado a las {cycle_result['timestamp']}. Posiciones activas: {cycle_result['active_positions_count']}")
+            
+            if auto_loop:
+                time.sleep(30)
+                st.rerun()
             
     # Registro de actividad del Bot
     st.markdown("#### 📜 Registro de Decisiones y Trailing Stops en Vivo")
