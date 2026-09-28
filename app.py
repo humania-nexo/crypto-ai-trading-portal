@@ -423,86 +423,43 @@ with tab_bot:
             tp_gain_pct = ((tp_p - entry_p) / entry_p) * 100
             sl_loss_pct = ((sl_p - entry_p) / entry_p) * 100
 
-            st.markdown(textwrap.dedent(f"""
-            <div style="background-color: #151a23; border: 1px solid #2a364f; border-left: 6px solid {stage_color}; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-                <!-- Encabezado de la Moneda y Estado -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #242c3d; padding-bottom: 10px;">
-                    <div>
-                        <span style="font-size: 20px; font-weight: bold; color: white;">🪙 {sym}</span>
-                        <span style="font-size: 13px; color: #94a3b8; margin-left: 12px;">Inversión: <b>${(p_info['quantity'] * entry_p):,.2f} USDT</b></span>
-                    </div>
-                    <span style="background: {stage_bg}; color: {stage_color}; border: 1px solid {stage_color}; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 12px;">{stage_title}</span>
-                </div>
+            with st.container(border=True):
+                # Encabezado: Moneda, Inversión y Estado
+                c_head1, c_head2 = st.columns([2, 1])
+                with c_head1:
+                    st.markdown(f"### 🪙 **{sym}** &nbsp; <span style='font-size:15px; color:#94a3b8;'>Inversión: <b>${(p_info['quantity'] * entry_p):,.2f} USDT</b></span>", unsafe_allow_html=True)
+                with c_head2:
+                    st.markdown(f"<div style='text-align:right; margin-top:8px;'><span style='background:{stage_bg}; color:{stage_color}; border:1px solid {stage_color}; padding:5px 12px; border-radius:6px; font-weight:bold; font-size:13px;'>{stage_title}</span></div>", unsafe_allow_html=True)
 
-                <!-- Contenedor en 2 Columnas Verticales -->
-                <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px;">
-                    <!-- Columna 1: Estructura Vertical (TP Arriba, Entrada en Medio, SL Abajo) -->
-                    <div style="background: #0e131b; border: 1px solid #242c3d; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
-                        <!-- Arriba: Take Profit -->
-                        <div style="background: rgba(14, 203, 129, 0.12); border-left: 4px solid #0ecb81; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span style="font-size: 11px; font-weight: bold; color: #0ecb81; text-transform: uppercase;">🎯 Take Profit (Arriba):</span><br>
-                                <span style="font-size: 15px; font-weight: bold; color: white; font-family: monospace;">{fmt_p(tp_p)}</span>
-                            </div>
-                            <span style="color: #0ecb81; font-weight: bold; font-size: 13px;">+{tp_gain_pct:.2f}%</span>
-                        </div>
+                st.markdown("---")
+                
+                # Dos columnas: Estructura Vertical y Trailing Stop al Costado
+                col_left, col_right = st.columns([1, 1.2])
+                with col_left:
+                    st.markdown("##### 📊 Estructura Principal de la Operación:")
+                    st.metric("🎯 Take Profit (Arriba)", fmt_p(tp_p), f"+{tp_gain_pct:.2f}%")
+                    st.metric("📥 Precio Entrada (En Medio)", fmt_p(entry_p), "Precio de Compra")
+                    sl_delta = "Protegido (Riesgo Cero)" if sl_p >= entry_p else f"{sl_loss_pct:.2f}%"
+                    st.metric("🛑 Stop Loss Actual (Abajo)", fmt_p(sl_p), sl_delta, delta_color="normal" if sl_p >= entry_p else "inverse")
 
-                        <!-- Medio: Entrada -->
-                        <div style="background: rgba(56, 189, 248, 0.12); border-left: 4px solid #38bdf8; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase;">📥 Entrada (En Medio):</span><br>
-                                <span style="font-size: 15px; font-weight: bold; color: white; font-family: monospace;">{fmt_p(entry_p)}</span>
-                            </div>
-                            <span style="color: #38bdf8; font-weight: 500; font-size: 12px;">Base</span>
-                        </div>
-
-                        <!-- Abajo: Stop Loss -->
-                        <div style="background: {'rgba(14, 203, 129, 0.12)' if sl_p >= entry_p else 'rgba(246, 70, 93, 0.12)'}; border-left: 4px solid {'#0ecb81' if sl_p >= entry_p else '#f6465d'}; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <span style="font-size: 11px; font-weight: bold; color: {'#0ecb81' if sl_p >= entry_p else '#f6465d'}; text-transform: uppercase;">🛑 Stop Loss Actual (Abajo):</span><br>
-                                <span style="font-size: 15px; font-weight: bold; color: white; font-family: monospace;">{fmt_p(sl_p)}</span>
-                            </div>
-                            <span style="color: {'#0ecb81' if sl_p >= entry_p else '#f6465d'}; font-weight: bold; font-size: 13px;">
-                                {'Protegido (+0.1%)' if sl_p >= entry_p else f'{sl_loss_pct:.2f}%'}
-                            </span>
-                        </div>
-                    </div>
-
-                    <!-- Columna 2: Hitos de Trailing Stop al Costado -->
-                    <div style="background: #0e131b; border: 1px solid #242c3d; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
-                        <!-- Nivel 2: Trailing Stop -->
-                        <div style="background: #151a23; border: 1px dashed #0ecb81; border-radius: 6px; padding: 8px 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="font-weight: bold; color: #0ecb81; font-size: 12px;">🟢 Hito 2: Trailing Stop (75% Objetivo)</span>
-                                <span style="font-size: 11px; color: #94a3b8;">Asegura +40% Ganancia</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1;">
-                                <span>⚡ Gatillo: <code style="color: #38bdf8; font-weight: bold;">{fmt_p(ts_trig)}</code></span>
-                                <span>➔ Nuevo SL: <code style="color: #0ecb81; font-weight: bold;">{fmt_p(ts_sl)}</code></span>
-                            </div>
-                        </div>
-
-                        <!-- Nivel 1: Break-Even -->
-                        <div style="background: #151a23; border: 1px dashed #f0b90b; border-radius: 6px; padding: 8px 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                <span style="font-weight: bold; color: #f0b90b; font-size: 12px;">🟡 Hito 1: Break-Even (50% Objetivo)</span>
-                                <span style="font-size: 11px; color: #94a3b8;">Riesgo Cero (Comisión Blindada)</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1;">
-                                <span>⚡ Gatillo: <code style="color: #f0b90b; font-weight: bold;">{fmt_p(be_trig)}</code></span>
-                                <span>➔ Nuevo SL: <code style="color: #0ecb81; font-weight: bold;">{fmt_p(be_sl)}</code></span>
-                            </div>
-                        </div>
-
-                        <!-- Estado Rápido -->
-                        <div style="background: #151a23; border-radius: 6px; padding: 6px 12px; display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8;">
-                            <span>🎯 TP Objetivo: <b style="color: #0ecb81;">{fmt_p(tp_p)}</b></span>
-                            <span>🛡️ Modo: <b style="color: #38bdf8;">Supervisión Continua</b></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """), unsafe_allow_html=True)
+                with col_right:
+                    st.markdown("##### 🛣️ Escalera de Trailing Stop al Costado:")
+                    
+                    with st.container(border=True):
+                        st.markdown(f"""
+                        **🟢 Hito 2: Trailing Stop (75% del Objetivo)**  
+                        *Asegura al menos +40% de Ganancia Neta*  
+                        • ⚡ **Gatillo de Activación:** `{fmt_p(ts_trig)}`  
+                        • ➔ **Nuevo Stop Loss:** `{fmt_p(ts_sl)}`
+                        """)
+                        
+                    with st.container(border=True):
+                        st.markdown(f"""
+                        **🟡 Hito 1: Break-Even (50% del Objetivo)**  
+                        *Capital Blindado (Riesgo Cero + Comisión)*  
+                        • ⚡ **Gatillo de Activación:** `{fmt_p(be_trig)}`  
+                        • ➔ **Nuevo Stop Loss:** `{fmt_p(be_sl)}`
+                        """)
 
 # =========================================================================
 # TAB 3: BACKTESTING / MÁQUINA DEL TIEMPO
