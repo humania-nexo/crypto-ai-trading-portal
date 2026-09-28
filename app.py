@@ -347,7 +347,7 @@ with tab_bot:
         bot_mode_choice = st.selectbox(
             "Modo de Operación del Bot",
             ["🧪 Simulado (Capital Ficticio / Prueba)", "🟢 Real Binance (Con límite estricto de capital)"],
-            index=0
+            index=1 if (trading_mode == "🟢 Cuenta Real de Binance" and binance_live.is_connected) else 0
         )
         is_bot_real = "Real Binance" in bot_mode_choice
     with col_bcfg2:
