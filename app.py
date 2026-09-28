@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
 import time
+import textwrap
 from datetime import datetime
 from dotenv import load_dotenv, set_key
 
@@ -278,85 +279,13 @@ with tab_radar:
                     for f_reason in opp["fundamental_reasons"]:
                         st.markdown(f"- {f_reason}")
                         
-                # Plan de Trade OCO con Visualización Vertical
-                target_gain = opp['take_profit'] - opp['price']
-                be_trig = opp['price'] + (target_gain * 0.50)
-                be_sl = opp['price'] * 1.001
-                ts_trig = opp['price'] + (target_gain * 0.75)
-                ts_sl = opp['price'] + (target_gain * 0.40)
-                
-                def fmt_price(val):
-                    return f"${val:,.8f}" if val < 1.0 else f"${val:,.4f}"
-                
-                st.markdown(f"""
-                <div style="margin: 14px 0 10px 0;">
-                    <div style="font-size: 14px; font-weight: bold; color: #38bdf8; margin-bottom: 8px;">🎯 Plan de Trade & Escalera de Trailing Stop:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px;">
-                        <!-- Columna 1: Estructura Vertical de Precios -->
-                        <div style="background: #0e131b; border: 1px solid #242c3d; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
-                            <!-- Arriba: TP -->
-                            <div style="background: rgba(14, 203, 129, 0.12); border-left: 4px solid #0ecb81; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <span style="font-size: 11px; font-weight: bold; color: #0ecb81; text-transform: uppercase;">🎯 Take Profit (Arriba):</span><br>
-                                    <span style="font-size: 15px; font-weight: bold; color: white; font-family: monospace;">{fmt_price(opp['take_profit'])}</span>
-                                </div>
-                                <span style="color: #0ecb81; font-weight: bold; font-size: 13px;">+{opp['tp_percent']}%</span>
-                            </div>
-
-                            <!-- Medio: Entrada -->
-                            <div style="background: rgba(56, 189, 248, 0.12); border-left: 4px solid #38bdf8; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <span style="font-size: 11px; font-weight: bold; color: #38bdf8; text-transform: uppercase;">📥 Precio Entrada (En Medio):</span><br>
-                                    <span style="font-size: 15px; font-weight: bold; color: white; font-family: monospace;">{fmt_price(opp['price'])}</span>
-                                </div>
-                                <span style="color: #38bdf8; font-weight: 500; font-size: 12px;">Base</span>
-                            </div>
-
-                            <!-- Abajo: Stop Loss -->
-                            <div style="background: rgba(246, 70, 93, 0.12); border-left: 4px solid #f6465d; border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <span style="font-size: 11px; font-weight: bold; color: #f6465d; text-transform: uppercase;">🛑 Stop Loss Inicial (Abajo):</span><br>
-                                    <span style="font-size: 15px; font-weight: bold; color: white; font-family: monospace;">{fmt_price(opp['stop_loss'])}</span>
-                                </div>
-                                <span style="color: #f6465d; font-weight: bold; font-size: 13px;">-{opp['sl_percent']}%</span>
-                            </div>
-                        </div>
-
-                        <!-- Columna 2: Hitos de Trailing Stop al Costado -->
-                        <div style="background: #0e131b; border: 1px solid #242c3d; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px;">
-                            <!-- Nivel 2: Trailing Stop -->
-                            <div style="background: #151a23; border: 1px dashed #0ecb81; border-radius: 6px; padding: 8px 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                    <span style="font-weight: bold; color: #0ecb81; font-size: 12px;">🟢 Hito 2: Trailing Stop (75% Objetivo)</span>
-                                    <span style="font-size: 11px; color: #94a3b8;">Asegura +40% Ganancia</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1;">
-                                    <span>⚡ Gatillo: <code style="color: #38bdf8; font-weight: bold;">{fmt_price(ts_trig)}</code></span>
-                                    <span>➔ Nuevo SL: <code style="color: #0ecb81; font-weight: bold;">{fmt_price(ts_sl)}</code></span>
-                                </div>
-                            </div>
-
-                            <!-- Nivel 1: Break-Even -->
-                            <div style="background: #151a23; border: 1px dashed #f0b90b; border-radius: 6px; padding: 8px 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                    <span style="font-weight: bold; color: #f0b90b; font-size: 12px;">🟡 Hito 1: Break-Even (50% Objetivo)</span>
-                                    <span style="font-size: 11px; color: #94a3b8;">Riesgo Cero (Comisión Blindada)</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #cbd5e1;">
-                                    <span>⚡ Gatillo: <code style="color: #f0b90b; font-weight: bold;">{fmt_price(be_trig)}</code></span>
-                                    <span>➔ Nuevo SL: <code style="color: #0ecb81; font-weight: bold;">{fmt_price(be_sl)}</code></span>
-                                </div>
-                            </div>
-
-                            <!-- Ratio Riesgo/Beneficio -->
-                            <div style="background: #151a23; border-radius: 6px; padding: 6px 12px; display: flex; justify-content: space-between; font-size: 12px; color: #94a3b8;">
-                                <span>⚖️ Ratio Beneficio / Riesgo: <b style="color: white;">1 : {opp['risk_reward_ratio']}</b></span>
-                                <span>⚡ Ejecución: <b style="color: #38bdf8;">Binance Spot OCO</b></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                # Plan de Trade OCO
+                st.markdown("#### 🎯 Plan de Ejecución con Órdenes OCO (Stop Loss & Take Profit)")
+                p1, p2, p3, p4 = st.columns(4)
+                p1.metric("📥 Precio Entrada", f"${opp['price']:,.6f}")
+                p2.metric("🛑 Stop Loss Sugerido", f"${opp['stop_loss']:,.6f}", f"-{opp['sl_percent']}%", delta_color="inverse")
+                p3.metric("🎯 Take Profit Objetivo", f"${opp['take_profit']:,.6f}", f"+{opp['tp_percent']}%")
+                p4.metric("⚖️ Ratio Beneficio / Riesgo", f"1 : {opp['risk_reward_ratio']}")
                 
                 # Botones de Operación
                 b_col1, b_col2 = st.columns([1, 2])
@@ -494,7 +423,7 @@ with tab_bot:
             tp_gain_pct = ((tp_p - entry_p) / entry_p) * 100
             sl_loss_pct = ((sl_p - entry_p) / entry_p) * 100
 
-            st.markdown(f"""
+            st.markdown(textwrap.dedent(f"""
             <div style="background-color: #151a23; border: 1px solid #2a364f; border-left: 6px solid {stage_color}; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
                 <!-- Encabezado de la Moneda y Estado -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #242c3d; padding-bottom: 10px;">
@@ -573,7 +502,7 @@ with tab_bot:
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """), unsafe_allow_html=True)
 
 # =========================================================================
 # TAB 3: BACKTESTING / MÁQUINA DEL TIEMPO
