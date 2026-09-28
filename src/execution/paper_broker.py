@@ -209,6 +209,29 @@ class PaperBroker:
             "trade": trade_record
         }
 
+    def delete_position(self, symbol: str, refund: bool = True) -> bool:
+        """Elimina una posición abierta inmediatamente."""
+        if symbol in self.open_positions:
+            pos = self.open_positions[symbol]
+            if refund and "Simulado" in pos.get("reason", ""):
+                self.balance_usdt += pos.get("cost_usdt", 0) + pos.get("fees_paid", 0)
+            del self.open_positions[symbol]
+            self.save_state()
+            return True
+        return False
+
+    def clear_all_simulated_positions(self) -> int:
+        """Elimina todas las posiciones simuladas de prueba de un solo golpe."""
+        removed = 0
+        for symbol, pos in list(self.open_positions.items()):
+            if "Simulado" in pos.get("reason", ""):
+                self.balance_usdt += pos.get("cost_usdt", 0) + pos.get("fees_paid", 0)
+                del self.open_positions[symbol]
+                removed += 1
+        if removed > 0:
+            self.save_state()
+        return removed
+
     def set_custom_balance(self, new_balance: float):
         """Permite al usuario fijar su saldo real exacto."""
         self.balance_usdt = round(float(new_balance), 2)

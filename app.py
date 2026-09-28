@@ -178,6 +178,21 @@ with st.sidebar:
     risk_pct = st.slider("Riesgo por Operación (%)", 0.5, 3.0, 1.0, 0.1)
     risk_manager.max_risk_per_trade_pct = risk_pct
 
+# --- AUTO-MONITOREO AUTOMÁTICO DE PRECIOS Y TRAILING STOPS ---
+if broker.open_positions:
+    active_syms = list(broker.open_positions.keys())
+    live_p_dict = {}
+    for sym_chk in active_syms:
+        try:
+            df_live = tech_agent.fetch_ohlcv(symbol=sym_chk, timeframe=tf_clean, limit=2)
+            if not df_live.empty:
+                live_p_dict[sym_chk] = float(df_live.iloc[-1]["close"])
+        except Exception:
+            pass
+    if live_p_dict:
+        auto_trader.update_trailing_stops(live_p_dict, is_live_trading=(trading_mode == "🟢 Cuenta Real de Binance"))
+        broker.update_and_check_positions(live_p_dict)
+
 # --- OBTENER VALUACIÓN PATRIMONIAL COMPLETA ---
 portfolio = broker.get_portfolio_summary()
 
@@ -387,12 +402,35 @@ with tab_bot:
         st.info("Aún no hay registros de ciclos. Presiona 'EJECUTAR CICLO AUTÓNOMO AHORA' para poner el bot a trabajar.")
         
     st.markdown("---")
-    st.subheader("🛡️ Posiciones Actualmente Bajo Supervisión del Bot")
+    
+    col_pos_hdr, col_pos_act = st.columns([2, 2])
+    with col_pos_hdr:
+        st.subheader("🛡️ Posiciones Bajo Supervisión del Bot")
+    with col_pos_act:
+        b_act1, b_act2 = st.columns(2)
+        with b_act1:
+            if st.button("🔄 Refrescar Precios en Vivo", use_container_width=True):
+                st.rerun()
+        with b_act2:
+            if st.button("🗑️ Borrar Pruebas Simuladas", use_container_width=True, type="secondary"):
+                cleared_count = broker.clear_all_simulated_positions()
+                st.success(f"¡Listo! Se eliminaron {cleared_count} operaciones simuladas del bot.")
+                time.sleep(0.5)
+                st.rerun()
+
     active_bot_pos = broker.open_positions
     if not active_bot_pos:
-        st.caption("No hay posiciones abiertas en este momento.")
+        st.info("No hay posiciones abiertas en este momento. Las posiciones que abras en Binance o mediante el bot aparecerán aquí.")
     else:
-        for sym, p_info in active_bot_pos.items():
+        # Ordenar: Posiciones Reales de Binance primero (arriba), Simuladas después
+        sorted_pos = sorted(
+            active_bot_pos.items(),
+            key=lambda item: 0 if "Real Binance" in item[1].get("reason", "") else 1
+        )
+        for sym, p_info in sorted_pos:
+            is_real = "Real Binance" in p_info.get("reason", "")
+            type_tag = "🟢 REAL BINANCE" if is_real else "🧪 SIMULADA (BOT)"
+            
             entry_p = p_info['entry_price']
             sl_p = p_info['stop_loss']
             tp_p = p_info['take_profit']
@@ -424,12 +462,12 @@ with tab_bot:
             sl_loss_pct = ((sl_p - entry_p) / entry_p) * 100
 
             with st.container(border=True):
-                # Encabezado: Moneda, Inversión y Estado
+                # Encabezado: Moneda, Tipo, Inversión y Estado
                 c_head1, c_head2 = st.columns([2, 1])
                 with c_head1:
-                    st.markdown(f"### 🪙 **{sym}** &nbsp; <span style='font-size:15px; color:#94a3b8;'>Inversión: <b>${(p_info['quantity'] * entry_p):,.2f} USDT</b></span>", unsafe_allow_html=True)
+                    st.markdown(f"### 🪙 **{sym}** &nbsp; <code style='font-size:12px; color:#38bdf8;'>{type_tag}</code> &nbsp; <span style='font-size:14px; color:#94a3b8;'>Inversión: <b>${(p_info['quantity'] * entry_p):,.2f} USDT</b></span>", unsafe_allow_html=True)
                 with c_head2:
-                    st.markdown(f"<div style='text-align:right; margin-top:8px;'><span style='background:{stage_bg}; color:{stage_color}; border:1px solid {stage_color}; padding:5px 12px; border-radius:6px; font-weight:bold; font-size:13px;'>{stage_title}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:right; margin-top:6px;'><span style='background:{stage_bg}; color:{stage_color}; border:1px solid {stage_color}; padding:5px 12px; border-radius:6px; font-weight:bold; font-size:13px;'>{stage_title}</span></div>", unsafe_allow_html=True)
 
                 st.markdown("---")
                 
@@ -460,6 +498,15 @@ with tab_bot:
                         • ⚡ **Gatillo de Activación:** `{fmt_p(be_trig)}`  
                         • ➔ **Nuevo Stop Loss:** `{fmt_p(be_sl)}`
                         """)
+                        
+                # Botón para borrar/cerrar individualmente
+                b_del_col1, b_del_col2 = st.columns([3, 1])
+                with b_del_col2:
+                    if st.button(f"🗑️ Borrar Operación", key=f"del_op_{sym}", use_container_width=True):
+                        broker.delete_position(sym)
+                        st.success(f"Posición de {sym} eliminada.")
+                        time.sleep(0.5)
+                        st.rerun()
 
 # =========================================================================
 # TAB 3: BACKTESTING / MÁQUINA DEL TIEMPO
