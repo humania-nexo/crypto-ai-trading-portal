@@ -139,27 +139,6 @@ with st.sidebar:
         else:
             st.info("Ingresa tus claves para leer tu saldo real en SHIB/USDT y operar.")
 
-    # Configuración de Alertas de Telegram
-    with st.expander("📲 Alertas en Tiempo Real (Telegram)", expanded=not notifier.is_configured):
-        tg_token = st.text_input("Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", ""), type="password", help="Obtenlo de @BotFather")
-        tg_chat = st.text_input("Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", ""), help="Tu ID numérico de Telegram (ej. de @userinfobot)")
-        
-        col_tg1, col_tg2 = st.columns(2)
-        with col_tg1:
-            if st.button("💾 Guardar Telegram", use_container_width=True):
-                set_key(".env", "TELEGRAM_BOT_TOKEN", tg_token)
-                set_key(".env", "TELEGRAM_CHAT_ID", tg_chat)
-                st.success("Configuración guardada.")
-                st.rerun()
-        with col_tg2:
-            if st.button("🔔 Probar Alerta", use_container_width=True):
-                temp_notifier = TelegramNotifier(bot_token=tg_token, chat_id=tg_chat)
-                ok = temp_notifier.send_message("🚀 <b>¡Conexión Exitosa con Crypto AI Portal!</b>\nRecibirás alertas instantáneas cuando la IA detecte oportunidades de alta probabilidad o se alcance un Take Profit.")
-                if ok:
-                    st.success("¡Alerta enviada a tu Telegram!")
-                else:
-                    st.error("Error al enviar mensaje. Verifica el Token y Chat ID.")
-
     st.subheader("⚙️ Configuración del Escáner")
     scan_timeframe = st.selectbox(
         "Temporalidad de Análisis",
