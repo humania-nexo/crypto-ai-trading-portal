@@ -496,6 +496,7 @@ with tab_portfolio:
         st.markdown("### 🪙 Criptomonedas en Posesión")
         if not active_crypto_assets:
             st.info("No se detectaron balances de criptomonedas distintos a USDT.")
+        else:
             asset_rows = []
             for a in active_crypto_assets:
                 free_amt = float(a.get("free_amount", a.get("free", 0.0)))
@@ -593,6 +594,32 @@ with tab_analytics:
                 "Estrategia": t.get("signal_reason", "")
             })
         st.dataframe(pd.DataFrame(df_journal), use_container_width=True)
+        
+    if trading_mode == "🟢 Cuenta Real de Binance" and binance_live.is_connected:
+        st.markdown("---")
+        st.subheader("🟢 Historial de Compras/Ventas Reales Ejecutadas en Binance")
+        with st.spinner("Consultando historial de ejecuciones reales en tu cuenta de Binance..."):
+            real_b_trades = binance_live.sync_trades_from_binance()
+            if real_b_trades:
+                real_t_rows = []
+                for rt in real_b_trades:
+                    p = rt.get("price", 0.0)
+                    p_str = f"${p:,.8f}" if p < 1.0 else f"${p:,.4f}"
+                    is_buy = rt.get("side") == "BUY"
+                    side_label = "🟢 COMPRA" if is_buy else "🔴 VENTA"
+                    
+                    real_t_rows.append({
+                        "Fecha / Hora": str(rt.get("datetime", ""))[:19].replace("T", " "),
+                        "Par": rt.get("symbol"),
+                        "Operación": side_label,
+                        "Precio Ejecutado": p_str,
+                        "Cantidad": f"{rt.get('amount', 0.0):,.4f}",
+                        "Total USDT": f"${rt.get('cost_usdt', 0.0):,.2f} USDT",
+                        "Comisión": f"${rt.get('fee_usdt', 0.0):.4f}"
+                    })
+                st.dataframe(pd.DataFrame(real_t_rows), use_container_width=True)
+            else:
+                st.caption("No se encontraron trades recientes en los pares consultados.")
 
 # =========================================================================
 # TAB 6: INSPECCIÓN DETALLADA DE GRÁFICO
